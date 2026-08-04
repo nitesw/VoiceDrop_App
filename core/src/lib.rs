@@ -1,6 +1,10 @@
 use std::ffi::CString;
 use std::os::raw::c_char;
 
+pub mod audio;
+pub mod engine;
+pub mod session;
+
 /// Returns a fixed greeting. Used only to prove the Swift-to-Rust FFI
 /// round-trip works before any real pipeline logic exists.
 fn ping() -> String {
