@@ -17,14 +17,16 @@ pub extern "C" fn voicedrop_core_ping() -> *mut c_char {
 }
 
 /// Frees a string previously returned by `voicedrop_core_ping`.
+///
+/// # Safety
+/// `s` must be null, or a pointer previously returned by `voicedrop_core_ping`
+/// that has not already been freed.
 #[no_mangle]
-pub extern "C" fn voicedrop_core_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn voicedrop_core_free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
-    unsafe {
-        drop(CString::from_raw(s));
-    }
+    drop(CString::from_raw(s));
 }
 
 #[cfg(test)]
@@ -42,6 +44,6 @@ mod tests {
         let ptr = voicedrop_core_ping();
         let text = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap().to_string();
         assert_eq!(text, ping());
-        voicedrop_core_free_string(ptr);
+        unsafe { voicedrop_core_free_string(ptr) };
     }
 }
