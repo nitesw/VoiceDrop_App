@@ -1,0 +1,4 @@
+module CVoiceDropCore {
+    header "../../../core/include/voicedrop_core.h"
+    export *
+}

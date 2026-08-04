@@ -6,13 +6,13 @@ Tracks [GitHub issue #1 — Phase 0: Repo & Workspace Scaffolding](https://githu
 
 ## Todos
 
-- [ ] Initialize git repo, `.gitignore` (Rust + Xcode + build artifacts) ([#12](https://github.com/nitesw/VoiceDrop_App/issues/12))
-- [ ] Create Cargo workspace with a `voicedrop-core` lib crate (empty, just compiles) ([#13](https://github.com/nitesw/VoiceDrop_App/issues/13))
-- [ ] Set up `cargo fmt` / `clippy` lint config ([#14](https://github.com/nitesw/VoiceDrop_App/issues/14))
-- [ ] Create Xcode project for the macOS shell (`macos/`): SwiftUI app target, configured as a menu-bar-only app (`LSUIElement`) ([#15](https://github.com/nitesw/VoiceDrop_App/issues/15))
-- [ ] Wire up FFI: build `voicedrop-core` as a static/dynamic lib, generate Swift bindings (`uniffi` or a hand-written C header + Swift wrapper) ([#16](https://github.com/nitesw/VoiceDrop_App/issues/16))
-- [ ] Smoke test: a single Rust function (e.g. `ping() -> String`) called from the Swift app on launch, result logged to console — proves the FFI boundary works before any real logic is built on top of it ([#17](https://github.com/nitesw/VoiceDrop_App/issues/17))
-- [ ] Basic CI: build the Rust workspace + run `cargo test` on push ([#18](https://github.com/nitesw/VoiceDrop_App/issues/18))
+- [x] Initialize git repo, `.gitignore` (Rust + Xcode + build artifacts) ([#12](https://github.com/nitesw/VoiceDrop_App/issues/12))
+- [x] Create Cargo workspace with a `voicedrop-core` lib crate (empty, just compiles) ([#13](https://github.com/nitesw/VoiceDrop_App/issues/13))
+- [x] Set up `cargo fmt` / `clippy` lint config ([#14](https://github.com/nitesw/VoiceDrop_App/issues/14))
+- [x] Create Xcode project for the macOS shell (`macos/`): SwiftUI app target, configured as a menu-bar-only app (`LSUIElement`) ([#15](https://github.com/nitesw/VoiceDrop_App/issues/15))
+- [x] Wire up FFI: build `voicedrop-core` as a static/dynamic lib, generate Swift bindings (`uniffi` or a hand-written C header + Swift wrapper) ([#16](https://github.com/nitesw/VoiceDrop_App/issues/16))
+- [x] Smoke test: a single Rust function (e.g. `ping() -> String`) called from the Swift app on launch, result logged to console — proves the FFI boundary works before any real logic is built on top of it ([#17](https://github.com/nitesw/VoiceDrop_App/issues/17))
+- [x] Basic CI: build the Rust workspace + run `cargo test` on push ([#18](https://github.com/nitesw/VoiceDrop_App/issues/18))
 
 ## Done when
 
