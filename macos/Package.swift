@@ -14,7 +14,11 @@ let package = Package(
             linkerSettings: [
                 // Requires `cargo build --release` to have run first, producing
                 // ../target/release/libvoicedrop_core.a (see README build steps).
-                .unsafeFlags(["-L../target/release", "-lvoicedrop_core"])
+                .unsafeFlags(["-L../target/release", "-lvoicedrop_core"]),
+                // cpal (inside voicedrop-core) drives CoreAudio's AudioUnit
+                // APIs directly on macOS.
+                .linkedFramework("AudioToolbox"),
+                .linkedFramework("CoreAudio"),
             ]
         ),
     ]

@@ -24,6 +24,7 @@ Scope: verify the whole system holds up, not just that each phase's own manual c
 
 **Manual QA pass per platform** ([#61](https://github.com/nitesw/VoiceDrop_App/issues/61))
 - [ ] Hotkey capture reliability (including edge cases: key-repeat, held across an app switch, held longer than expected)
+- [ ] Deferred from Phase 1: disconnect the input device (e.g. unplug AirPods/USB mic) mid-recording on each platform and confirm the app surfaces the failure cleanly (no crash) rather than hanging — unit-tested at the state-machine level only, never exercised against real hardware
 - [ ] Dictation HUD rendering and position picker across all supported positions, including multi-monitor setups
 - [ ] Menu Bar Icon / tray icon toggle behavior (enable/disable actually suspends the hotkey)
 - [ ] Settings Window: every preference persists correctly across app restart

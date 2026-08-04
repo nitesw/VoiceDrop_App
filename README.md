@@ -13,15 +13,15 @@ Push-to-talk dictation with automatic filler-word removal and grammar cleanup. S
 Requires Rust (`rustup`) and Xcode command line tools.
 
 ```sh
-# 1. Build the Rust core first — the Swift package links against its output.
-cargo build --release
-
-# 2. Build and run the macOS shell.
-cd macos
-swift run
+./scripts/build-macos-app.sh          # debug build (pass "release" for a release build)
+open macos/.build/VoiceDrop.app
 ```
 
-On launch, the app runs as a menu-bar-only process (no Dock icon) and logs a round-trip result from the Rust core to the console — confirming the FFI boundary works. Nothing else exists yet.
+This assembles a real `VoiceDrop.app` bundle (`Info.plist`, ad-hoc code signature with a stable `com.voicedrop.app` identifier) rather than a bare `swift run` binary — required so macOS attributes permission prompts (microphone, Accessibility/Input Monitoring) to VoiceDrop itself instead of to the launching shell, and so grants survive rebuilds.
+
+`swift run` from `macos/` still works for quick iteration (it prints the FFI round-trip result straight to your terminal), but won't have a stable permission identity — use the bundled `.app` for anything touching the hotkey or microphone.
+
+On launch, the app runs as a menu-bar-only process (no Dock icon) and calls into the Rust core — confirming the FFI boundary works. Nothing else exists yet.
 
 ## Testing
 

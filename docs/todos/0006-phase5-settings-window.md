@@ -16,6 +16,9 @@ Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): 
 
 **Hotkey & startup** ([#37](https://github.com/nitesw/VoiceDrop_App/issues/37))
 - [ ] Push-to-Talk Hotkey rebinding UI, with conflict detection against existing system/app shortcuts
+- [ ] F-row/media-key handling (discovered in Phase 1: bare F5 didn't reach `CGEventTap` at all on this dev machine, and turned out to be bound to the system Siri/Dictation shortcut). Two distinct constraints, only one of which we can actually detect:
+  - **Standard-function-keys mode** — whether "Use F1, F2, etc. as standard function keys" is enabled in System Settings → Keyboard. This *is* checkable (`defaults read -g com.apple.keyboard.fnState` or equivalent) — if a user picks an F-row key in the rebinding UI while this is off, detect it and prompt them to enable it or pick a different key.
+  - **System shortcut reservations** — individual keys can be bound to a system action (Mission Control, Siri, brightness, etc.) in System Settings → Keyboard → Keyboard Shortcuts, consumed by the OS before any third-party tap ever sees them. There's no public API to query which key a given system shortcut currently occupies, so this is **not programmatically detectable** — accepted limitation. The only fallback UX is: if a newly-bound hotkey silently never fires despite the tap being armed, show generic guidance ("this key may be reserved by a system shortcut — check System Settings → Keyboard Shortcuts") rather than trying to pinpoint the conflict automatically
 - [ ] *Launch at Login* toggle using `SMAppService`
 - [ ] Persist both settings; confirm they survive app relaunch
 

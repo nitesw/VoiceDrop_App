@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CVoiceDropCore
 
 /// Calls into the Rust core and returns the result as a Swift String,
@@ -12,10 +13,41 @@ func corePing() -> String {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var engine: OpaquePointer?
+    private var hotkeyMonitor: HotkeyMonitor?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar-only app: no Dock icon, no main window.
         NSApp.setActivationPolicy(.accessory)
-        print("[VoiceDrop] Rust core says: \(corePing())")
+        voiceDropLog.log("Rust core says: \(corePing(), privacy: .public)")
+
+        // Request microphone access immediately at launch, rather than
+        // waiting for cpal to lazily open the input device on the first
+        // recording attempt — the user should see this prompt right away,
+        // not several seconds into their first hotkey press.
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            voiceDropLog.log("Microphone access granted: \(granted, privacy: .public)")
+        }
+
+        guard let engine = voicedrop_engine_new() else {
+            voiceDropLog.log("Failed to create engine.")
+            return
+        }
+        self.engine = engine
+
+        let monitor = HotkeyMonitor(engine: engine)
+        hotkeyMonitor = monitor
+        if !monitor.start() {
+            voiceDropLog.log(
+                "Grant Accessibility/Input Monitoring permission in System Settings, then relaunch."
+            )
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let engine {
+            voicedrop_engine_free(engine)
+        }
     }
 }
 
