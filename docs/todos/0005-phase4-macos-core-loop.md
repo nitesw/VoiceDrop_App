@@ -4,22 +4,26 @@ Tracks [GitHub issue #5](https://github.com/nitesw/VoiceDrop_App/issues/5). Depe
 
 Scope: give the pipeline a face. This is the first phase where VoiceDrop is usable end-to-end on macOS — hold hotkey, see feedback, get text injected.
 
+Visual design for every surface below follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): monochrome (black/white/gray) with a single accent color reserved for the active/recording indicator, native macOS corner radius (no custom radius), no decorative chrome.
+
 ## Todos
 
 **Menu Bar Icon** ([#31](https://github.com/nitesw/VoiceDrop_App/issues/31))
-- [ ] Persistent *Menu Bar Icon* using `NSStatusItem`
+- [ ] Persistent *Menu Bar Icon* using `NSStatusItem`, as a monochrome template image (auto-adapts to light/dark menu bar, per [VISUAL_STYLE.md](../design/VISUAL_STYLE.md))
 - [ ] Single click opens a dropdown: Enable/Disable toggle, "Settings...", "Quit"
-- [ ] Icon visually reflects enabled/disabled state (not just the dropdown content)
+- [ ] Icon reflects enabled/disabled state via opacity or a minimal glyph change — not by introducing color
 - [ ] Disabling the app suspends the *Push-to-Talk Hotkey* listener entirely (confirm hotkey does nothing while disabled)
 
 **Dictation HUD** ([#32](https://github.com/nitesw/VoiceDrop_App/issues/32))
-- [ ] Floating pill-shaped overlay window (SwiftUI, borderless `NSPanel` or similar, always-on-top)
-- [ ] Recording state: waveform visualization driven by live audio levels from the Rust core
-- [ ] Processing state: spinner/progress indicator while STT + Cleanup Pass run
-- [ ] "No speech detected" state: brief notice, then auto-dismiss
-- [ ] Injection-fallback state: brief "copied to clipboard" notice, then auto-dismiss
+- [ ] Floating pill-shaped overlay window (SwiftUI, borderless `NSPanel` or similar, always-on-top), corner radius matching macOS's native default — no custom radius
+- [ ] Monochrome throughout; the single accent color is reserved for the recording-state waveform only
+- [ ] Recording state: waveform visualization (accent color) driven by live audio levels from the Rust core
+- [ ] Processing state: spinner/progress indicator, grayscale — no color introduced here
+- [ ] "No speech detected" state: brief notice, then auto-dismiss — grayscale, no color
+- [ ] Injection-fallback state: brief "copied to clipboard" notice, then auto-dismiss — grayscale, no color
 - [ ] Position picker plumbing: HUD reads its screen position (near cursor / bottom of screen / other edges) from config — the picker UI itself is Phase 5, but the HUD must already support being positioned anywhere
 - [ ] HUD never steals focus from the *Injection Target* app
+- [ ] Keep it minimal: no element that doesn't communicate state or enable an action — if in doubt, cut it
 
 **Text injection** ([#33](https://github.com/nitesw/VoiceDrop_App/issues/33))
 - [ ] Capture which app/field had focus at `Idle → Recording` transition — this is the *Injection Target*, fixed at session start even if focus later changes

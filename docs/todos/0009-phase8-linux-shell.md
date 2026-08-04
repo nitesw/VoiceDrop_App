@@ -4,6 +4,8 @@ Tracks [GitHub issue #9](https://github.com/nitesw/VoiceDrop_App/issues/9). Depe
 
 Scope: bring the full feature set to Linux. This is the platform most likely to need scope trade-offs (X11 vs. Wayland) — call those out explicitly rather than silently degrading functionality.
 
+Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): monochrome + single accent color, and the same corner radius as macOS (not the target desktop environment's native default) — kept consistent across platforms.
+
 ## Todos
 
 **Project setup** ([#51](https://github.com/nitesw/VoiceDrop_App/issues/51))
@@ -17,7 +19,8 @@ Scope: bring the full feature set to Linux. This is the platform most likely to 
 - [ ] If Wayland has hard limitations (e.g. no arbitrary global hotkeys without compositor support, restricted synthetic input), document exactly what degrades and how the user is informed
 
 **Tray icon equivalent** ([#52](https://github.com/nitesw/VoiceDrop_App/issues/52))
-- [ ] Tray icon via `libappindicator` (or the current recommended equivalent, since this ecosystem shifts) with the same dropdown: Enable/Disable, Settings, Quit
+- [ ] Tray icon via `libappindicator` (or the current recommended equivalent, since this ecosystem shifts), monochrome, with the same dropdown: Enable/Disable, Settings, Quit
+- [ ] Icon state reflects enabled/disabled via opacity or a minimal glyph change — not by introducing color
 - [ ] Confirm tray icon actually renders across at least the major desktop environments in scope (e.g. GNOME, KDE) — GNOME in particular has historically needed an extension for tray icons
 
 **Hotkey & injection** ([#53](https://github.com/nitesw/VoiceDrop_App/issues/53))
@@ -26,7 +29,7 @@ Scope: bring the full feature set to Linux. This is the platform most likely to 
 - [ ] Secure-field detection equivalent, to the extent the display server exposes this information
 
 **Dictation HUD** ([#54](https://github.com/nitesw/VoiceDrop_App/issues/54))
-- [ ] Native overlay window reproducing the same states as macOS/Windows
+- [ ] Native overlay window, monochrome, corner radius matching macOS's (not the target desktop environment's native default), reproducing the same states as macOS/Windows (recording/waveform in the single accent color, all other states grayscale)
 - [ ] Position picker parity, accounting for any multi-monitor/compositor quirks
 
 **Settings Window & History** ([#55](https://github.com/nitesw/VoiceDrop_App/issues/55))

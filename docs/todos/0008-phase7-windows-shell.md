@@ -4,6 +4,8 @@ Tracks [GitHub issue #8](https://github.com/nitesw/VoiceDrop_App/issues/8). Depe
 
 Scope: bring the full macOS feature set to Windows, reusing `voicedrop-core` unchanged wherever possible.
 
+Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): same monochrome + single-accent-color language as macOS, and the same corner radius as macOS (VoiceDrop's own radius, not Windows's native default) — kept consistent across platforms.
+
 ## Todos
 
 **Project setup** ([#46](https://github.com/nitesw/VoiceDrop_App/issues/46))
@@ -12,8 +14,8 @@ Scope: bring the full macOS feature set to Windows, reusing `voicedrop-core` unc
 - [ ] Basic CI: Windows build added alongside the existing Rust/macOS CI
 
 **Menu Bar Icon equivalent** ([#47](https://github.com/nitesw/VoiceDrop_App/issues/47))
-- [ ] System tray icon with the same dropdown contents as macOS: Enable/Disable, Settings, Quit
-- [ ] Icon state reflects enabled/disabled
+- [ ] System tray icon, monochrome, with the same dropdown contents as macOS: Enable/Disable, Settings, Quit
+- [ ] Icon state reflects enabled/disabled via opacity or a minimal glyph change — not by introducing color
 
 **Hotkey & injection** ([#48](https://github.com/nitesw/VoiceDrop_App/issues/48))
 - [ ] Global hotkey capture via Windows APIs (`RegisterHotKey` or low-level keyboard hook, depending on reliability needs), driving the same *Dictation Session* state machine in the Rust core
@@ -21,7 +23,7 @@ Scope: bring the full macOS feature set to Windows, reusing `voicedrop-core` unc
 - [ ] Secure-field detection equivalent for Windows (behavior parity with the macOS Phase 6 work)
 
 **Dictation HUD** ([#49](https://github.com/nitesw/VoiceDrop_App/issues/49))
-- [ ] Native overlay window (borderless, always-on-top) reproducing the same states as macOS: recording/waveform, processing, no-speech, fallback notice
+- [ ] Native overlay window (borderless, always-on-top), monochrome, corner radius matching macOS's (not Windows's native default), reproducing the same states as macOS: recording/waveform (single accent color), processing, no-speech, fallback notice (all grayscale)
 - [ ] Position picker parity (near cursor / bottom of screen / other edges)
 
 **Settings Window & History** ([#50](https://github.com/nitesw/VoiceDrop_App/issues/50))

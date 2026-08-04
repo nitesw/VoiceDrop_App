@@ -4,12 +4,15 @@ Tracks [GitHub issue #6](https://github.com/nitesw/VoiceDrop_App/issues/6). Depe
 
 Scope: move every hardcoded default from Phase 4 into user-configurable preferences, and add persisted *Session History*. No new pipeline behavior — this phase is entirely about surfacing and storing configuration.
 
+Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): standard native window chrome, monochrome content, the single accent color reserved for at most one primary action per view (e.g. "Save"/"Test Key") — not for section headers, icons, or general UI.
+
 ## Todos
 
 **Settings Window shell** ([#36](https://github.com/nitesw/VoiceDrop_App/issues/36))
 - [ ] Build the *Settings Window* (SwiftUI), reachable from the *Menu Bar Icon*'s "Settings..." item
 - [ ] (Optional) a dedicated hotkey to open Settings directly, per earlier discussion
 - [ ] Tabbed/sectioned layout: General, Cleanup, Vocabulary, Cloud, History — or equivalent grouping
+- [ ] Minimal, monochrome layout throughout — no decorative icons/color used just to differentiate sections; rely on native section/tab chrome instead
 
 **Hotkey & startup** ([#37](https://github.com/nitesw/VoiceDrop_App/issues/37))
 - [ ] Push-to-Talk Hotkey rebinding UI, with conflict detection against existing system/app shortcuts

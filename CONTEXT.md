@@ -33,7 +33,7 @@ A short, fixed set of spoken instructions (e.g. "scratch that" to discard the se
 A local, persistent log of past Dictation Sessions (Raw Transcript, Cleaned Transcript, timestamp), kept so the user can review, re-copy, or recover text if injection failed or landed in the wrong Injection Target. Stored locally only; user-clearable.
 
 **Dictation HUD**
-A small floating pill-shaped overlay shown during a Dictation Session, displaying a waveform while recording and a processing indicator while the Cleanup Pass runs. Its screen position (near cursor, bottom of screen, or other screen edges) is a user preference.
+A small floating pill-shaped overlay shown during a Dictation Session, displaying a waveform while recording and a processing indicator while the Cleanup Pass runs. Its screen position (near cursor, bottom of screen, or other screen edges) is a user preference. Visual treatment follows [docs/design/VISUAL_STYLE.md](docs/design/VISUAL_STYLE.md).
 
 **Cleanup Strength**
 A global preference (not per-session) controlling how aggressive the Cleanup Pass is. Levels: verbatim-clean (disfluency + grammar only, preserves original wording/structure), light-edit (also merges fragments, tightens wordy phrasing), and formal-rewrite (heavier restructuring). Changed via the Settings Window, not mid-session.
