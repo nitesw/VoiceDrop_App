@@ -8,6 +8,12 @@ Visual design for every surface below follows [docs/design/VISUAL_STYLE.md](../d
 
 ## Todos
 
+**First-run model provisioning** ([#67](https://github.com/nitesw/VoiceDrop_App/issues/67)) (tracks the Swift-side gap left open by [ADR-0004](../adr/0004-whisper-model-download-on-first-run.md) and [ADR-0005](../adr/0005-cleanup-pass-optional-and-free-form-endpoint.md))
+- [ ] On launch, check whether the Whisper model exists at the core's default path (`voicedrop_engine_set_model_path`'s default); if not, download it before the *Push-to-Talk Hotkey* is armed — the hotkey must not be usable while STT has no model to run
+- [ ] Show visible download progress (reuse the *Dictation HUD* chrome, or a dedicated first-run screen — decide which); no silent multi-hundred-MB download with no feedback
+- [ ] Surface a clear, retryable error if the download fails (bad network, disk full) rather than hanging or crashing
+- [ ] Separately, if the user selects the local Cleanup Pass provider (Phase 3, [ADR-0005](../adr/0005-cleanup-pass-optional-and-free-form-endpoint.md)), trigger that GGUF model's download the same way, at the point of selection — not bundled into the same first-run gate, since `None`/cloud users should never see it
+
 **Menu Bar Icon** ([#31](https://github.com/nitesw/VoiceDrop_App/issues/31))
 - [ ] Persistent *Menu Bar Icon* using `NSStatusItem`, as a monochrome template image (auto-adapts to light/dark menu bar, per [VISUAL_STYLE.md](../design/VISUAL_STYLE.md))
 - [ ] Single click opens a dropdown: Enable/Disable toggle, "Settings...", "Quit"
@@ -43,6 +49,7 @@ Visual design for every surface below follows [docs/design/VISUAL_STYLE.md](../d
 
 ## Done when
 
+- On first run, the Whisper model downloads with visible progress before the hotkey becomes usable, and failures are surfaced clearly rather than silently hanging
 - A user can hold the hotkey anywhere, speak, release, and see the Cleaned Transcript appear at their cursor within a few seconds
 - The HUD accurately reflects every session state (recording, processing, no-speech, fallback)
 - Injection failure never loses the transcript — it always lands on the clipboard instead

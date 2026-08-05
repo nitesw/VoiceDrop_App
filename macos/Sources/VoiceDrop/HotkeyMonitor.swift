@@ -59,6 +59,22 @@ final class HotkeyMonitor {
                 callback: { _, type, event, refcon in
                     guard let refcon else { return Unmanaged.passUnretained(event) }
                     let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
+
+                    // macOS disables a tap that doesn't return from its callback
+                    // quickly (watchdog), or via .tapDisabledByUserInput. Once
+                    // disabled, every keystroke — including ours — passes
+                    // through unswallowed, which is exactly the "hotkey leaks
+                    // through as raw input" symptom. Re-enable immediately;
+                    // this is Apple's documented recovery path. The real fix is
+                    // keeping the callback itself fast (see handleKeyUp), this
+                    // is just the safety net.
+                    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                        if let tap = monitor.eventTap {
+                            CGEvent.tapEnable(tap: tap, enable: true)
+                        }
+                        return Unmanaged.passUnretained(event)
+                    }
+
                     if monitor.handle(type: type, event: event) {
                         return nil  // consumed: don't let it reach the focused app
                     }
@@ -123,26 +139,53 @@ final class HotkeyMonitor {
     }
 
     private func handleKeyUp() {
+        // Only this state check runs on the tap's callback thread — it's
+        // cheap. Everything else (stopping capture, running Whisper, which
+        // can take several seconds) is dispatched off this thread. A
+        // CGEventTap callback that blocks gets disabled by the system
+        // watchdog, which is what silently broke the hotkey after one
+        // successful recording: voicedrop_engine_stop_recording used to run
+        // Whisper synchronously right here.
         guard voicedrop_engine_state(engine) == VOICEDROP_STATE_RECORDING else { return }
 
-        let status = voicedrop_engine_stop_recording(engine)
-        guard status == VOICEDROP_OK else {
-            voiceDropLog.log("Recording stopped with error (status \(status, privacy: .public)).")
+        let engine = self.engine
+        DispatchQueue.global(qos: .userInitiated).async {
+            let status = voicedrop_engine_stop_recording(engine)
+            if status == VOICEDROP_NO_SPEECH {
+                voiceDropLog.log("No speech detected — audio was silent or too short to transcribe.")
+                _ = voicedrop_engine_reset(engine)
+                return
+            }
+            guard status == VOICEDROP_OK else {
+                voiceDropLog.log("Recording stopped with error (status \(status, privacy: .public)).")
+                _ = voicedrop_engine_reset(engine)
+                return
+            }
+
+            let wavPath = NSTemporaryDirectory() + "voicedrop_verification.wav"
+            let wavStatus = wavPath.withCString { voicedrop_engine_write_verification_wav(engine, $0) }
+            if wavStatus == VOICEDROP_OK {
+                voiceDropLog.log(
+                    "Recording complete. Verification WAV written to: \(wavPath, privacy: .public)")
+            } else {
+                voiceDropLog.log(
+                    "Recording complete, but WAV write failed (status \(wavStatus, privacy: .public)).")
+            }
+
+            // Phase 2 debug aid only — Phase 4 owns real transcript handling
+            // (Cleanup Pass + injection). This just proves Whisper produced
+            // something, via Console.app.
+            if let cString = voicedrop_engine_last_transcript(engine) {
+                defer { voicedrop_core_free_string(cString) }
+                let transcript = String(cString: cString)
+                voiceDropLog.log("Raw Transcript: \(transcript, privacy: .public)")
+            } else {
+                voiceDropLog.log("No transcript available.")
+            }
+
+            // Phase 3/4 don't exist yet, so reset back to Idle immediately
+            // after logging so the hotkey can be pressed again.
             _ = voicedrop_engine_reset(engine)
-            return
         }
-
-        let wavPath = NSTemporaryDirectory() + "voicedrop_verification.wav"
-        let wavStatus = wavPath.withCString { voicedrop_engine_write_verification_wav(engine, $0) }
-        if wavStatus == VOICEDROP_OK {
-            voiceDropLog.log("Recording complete. Verification WAV written to: \(wavPath, privacy: .public)")
-        } else {
-            voiceDropLog.log(
-                "Recording complete, but WAV write failed (status \(wavStatus, privacy: .public)).")
-        }
-
-        // Phase 1 has no real STT/Cleanup Pass to advance past Done, so
-        // reset back to Idle immediately so F5 can be pressed again.
-        _ = voicedrop_engine_reset(engine)
     }
 }

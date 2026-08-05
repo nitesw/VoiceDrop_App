@@ -8,10 +8,14 @@ pub enum SessionState {
     Recording,
     Processing,
     Done,
-    /// No Phase 1 event reaches this yet — reachable once "scratch that" and
-    /// no-speech detection exist (Phase 6 / Phase 2 respectively). Defined
-    /// now so the state space doesn't need reshaping later.
+    /// No Phase 1 event reaches this yet — reachable once "scratch that"
+    /// exists (Phase 6). Defined now so the state space doesn't need
+    /// reshaping later.
     Discarded,
+    /// Reached instead of `Done` when the *Raw Transcript* is empty (silence
+    /// or an accidental brief tap) — short-circuits before the Cleanup Pass,
+    /// which shouldn't need to handle empty input.
+    NoSpeech,
     Error,
 }
 
@@ -25,6 +29,9 @@ pub enum SessionEvent {
     ProcessingSucceeded,
     /// Pipeline failed at any stage.
     ProcessingFailed,
+    /// The *Raw Transcript* came back empty (silence-only audio, or the
+    /// buffer was too short to bother running STT on at all).
+    NoSpeechDetected,
     /// Audio capture itself failed (e.g. input device disconnected) before
     /// there was anything to process.
     RecordingFailed,
@@ -79,8 +86,9 @@ impl Session {
             (Recording, RecordingFailed) => Error,
             (Processing, ProcessingSucceeded) => Done,
             (Processing, ProcessingFailed) => Error,
+            (Processing, NoSpeechDetected) => NoSpeech,
             (Processing, Discard) => Discarded,
-            (Done, Reset) | (Discarded, Reset) | (Error, Reset) => Idle,
+            (Done, Reset) | (Discarded, Reset) | (Error, Reset) | (NoSpeech, Reset) => Idle,
             _ => {
                 return Err(IllegalTransition {
                     from: self.state,
@@ -162,6 +170,15 @@ mod tests {
         let mut s = Session::new();
         s.apply(HotkeyDown).unwrap();
         assert_eq!(s.apply(RecordingFailed), Ok(Error));
+        assert_eq!(s.apply(Reset), Ok(Idle));
+    }
+
+    #[test]
+    fn no_speech_detected_reaches_no_speech_then_resets() {
+        let mut s = Session::new();
+        s.apply(HotkeyDown).unwrap();
+        s.apply(HotkeyUp).unwrap();
+        assert_eq!(s.apply(NoSpeechDetected), Ok(NoSpeech));
         assert_eq!(s.apply(Reset), Ok(Idle));
     }
 

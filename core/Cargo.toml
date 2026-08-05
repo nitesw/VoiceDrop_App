@@ -11,3 +11,4 @@ crate-type = ["staticlib", "lib"]
 [dependencies]
 cpal = "0.15"
 hound = "3.5"
+whisper-rs = "0.16"
