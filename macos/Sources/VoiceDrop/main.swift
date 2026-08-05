@@ -35,6 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.engine = engine
 
+        // Phase 2 manual language-quality testing aid only (see
+        // 0003-phase2-stt.md) — Phase 5's Settings Window is the real,
+        // permanent way to set this. VOICEDROP_LANGUAGE takes an ISO 639-1
+        // code (e.g. "fr", "uk", "pl"); unset means auto-detect.
+        if let lang = ProcessInfo.processInfo.environment["VOICEDROP_LANGUAGE"] {
+            let status = lang.withCString { voicedrop_engine_set_language(engine, $0) }
+            voiceDropLog.log(
+                "Language set to \(lang, privacy: .public) (status \(status, privacy: .public)).")
+        }
+
         let monitor = HotkeyMonitor(engine: engine)
         hotkeyMonitor = monitor
         if !monitor.start() {

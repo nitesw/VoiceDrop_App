@@ -19,6 +19,10 @@ let package = Package(
                 // APIs directly on macOS.
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
+                // whisper.cpp (inside voicedrop-core, via whisper-rs) is C++
+                // and uses Accelerate's vDSP/BLAS for CPU inference.
+                .linkedLibrary("c++"),
+                .linkedFramework("Accelerate"),
             ]
         ),
     ]
