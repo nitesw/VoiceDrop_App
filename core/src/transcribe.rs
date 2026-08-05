@@ -92,11 +92,8 @@ impl Transcriber {
         if !model_path.is_file() {
             return Err(TranscribeError::ModelNotFound(model_path.to_path_buf()));
         }
-        let ctx = WhisperContext::new_with_params(
-            model_path,
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| TranscribeError::ModelLoadFailed(e.to_string()))?;
+        let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+            .map_err(|e| TranscribeError::ModelLoadFailed(e.to_string()))?;
         Ok(Transcriber { ctx })
     }
 
