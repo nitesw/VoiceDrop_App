@@ -172,15 +172,18 @@ final class HotkeyMonitor {
                     "Recording complete, but WAV write failed (status \(wavStatus, privacy: .public)).")
             }
 
-            // Phase 2 debug aid only — Phase 4 owns real transcript handling
-            // (Cleanup Pass + injection). This just proves Whisper produced
-            // something, via Console.app.
+            // Phase 2/3 debug aid only — Phase 4 owns real transcript
+            // handling (injection). This just proves STT + Cleanup Pass
+            // produced something, via Console.app.
+            if let cString = voicedrop_engine_last_raw_transcript(engine) {
+                defer { voicedrop_core_free_string(cString) }
+                voiceDropLog.log("Raw Transcript: \(String(cString: cString), privacy: .public)")
+            }
             if let cString = voicedrop_engine_last_transcript(engine) {
                 defer { voicedrop_core_free_string(cString) }
-                let transcript = String(cString: cString)
-                voiceDropLog.log("Raw Transcript: \(transcript, privacy: .public)")
+                voiceDropLog.log("Cleaned Transcript: \(String(cString: cString), privacy: .public)")
             } else {
-                voiceDropLog.log("No transcript available.")
+                voiceDropLog.log("No cleaned transcript available.")
             }
 
             // Phase 3/4 don't exist yet, so reset back to Idle immediately

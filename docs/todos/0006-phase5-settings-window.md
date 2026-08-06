@@ -28,9 +28,21 @@ Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): 
 
 **Cleanup configuration** ([#39](https://github.com/nitesw/VoiceDrop_App/issues/39))
 - [ ] *Cleanup Strength* selector (verbatim-clean / light-edit / formal-rewrite), wired to the Phase 3 provider interface
-- [ ] Cleanup provider selector: local llama.cpp vs. Apple Foundation Models (macOS only) vs. cloud
-- [ ] Cloud opt-in toggle + API key entry field, key stored in Keychain (never plaintext on disk)
-- [ ] Validate the entered key (e.g. a lightweight test call) and show clear success/failure feedback
+- [ ] Cleanup provider selector, three clearly labeled options per [ADR-0008](../adr/0008-local-cleanup-in-process-again.md) (naming matters here — don't blur these together): **"None"** (no processing) / **"Built-in"** (self-contained local model, downloads automatically, no external app — this is `Local`/llama.cpp) / **"Custom endpoint"** (BYO via Ollama, LM Studio, vLLM, or a cloud API — this is `Cloud`'s free-form URL). Apple Foundation Models is a fourth option on macOS only. `None` is a real, fully-supported choice (no model download, no cloud key), not just an edge case to tolerate
+- [ ] "Custom endpoint" config is a **free-form base URL** field + API key field, not a vendor dropdown — per [ADR-0005](../adr/0005-cleanup-pass-optional-and-free-form-endpoint.md), assumed OpenAI-compatible (`voicedrop_engine_set_cleanup_cloud_config`); works against hosted providers, OpenRouter, or a local server (Ollama/LM Studio/vLLM) alike. When pointed at Ollama, prefill the model field from `voicedrop_ollama_model_*` suggestions. API key stored in Keychain (never plaintext on disk)
+- [ ] Validate the entered URL/key (e.g. a lightweight test call) and show clear success/failure feedback
+
+**Model picker** ([#69](https://github.com/nitesw/VoiceDrop_App/issues/69)) (backing Rust plumbing already built in Phase 3 — `core/src/models.rs`'s `voicedrop_model_*` FFI, see [ADR-0008](../adr/0008-local-cleanup-in-process-again.md))
+- [ ] For "Built-in": dropdown listing `voicedrop_model_catalog_*` entries (one Whisper/STT model, several Cleanup Pass candidates: Qwen2.5-0.5B/1.5B, Llama-3.2-3B — filter by `voicedrop_model_catalog_kind`), showing name + approximate size + downloaded/not-downloaded state (`voicedrop_model_is_downloaded`)
+- [ ] "Download" button per not-yet-downloaded entry, calling `voicedrop_model_download` **off the main thread** — it blocks for the whole transfer (same rule as any other long-running core call, see the CGEventTap lesson in `HotkeyMonitor.swift`) — with a progress bar driven by the `on_progress` callback
+- [ ] "Delete" button per downloaded entry, calling `voicedrop_model_delete`; confirm before deleting the model currently in use
+- [ ] Selecting a model calls `voicedrop_model_path_for` then `voicedrop_engine_set_model_path`/`voicedrop_engine_set_cleanup_local_model_path` with the result
+- [ ] Handle "selected model isn't downloaded yet" — prompt to download rather than silently failing at the next Dictation Session
+- [ ] For "Custom endpoint" pointed at Ollama specifically: suggest names from `voicedrop_ollama_model_*` (Ollama itself handles the actual `ollama pull`, VoiceDrop doesn't manage that download)
+
+**Word blocklist** ([#70](https://github.com/nitesw/VoiceDrop_App/issues/70)) (backing Rust plumbing already built in Phase 3 — `voicedrop_engine_set_blocklist`, `core/src/blocklist.rs`)
+- [ ] Editable list UI for custom "always remove" words, shown alongside (but visually distinct from) *Custom Vocabulary* below — opposite purposes, easy to conflate if not labeled clearly
+- [ ] Show the built-in default words exist (without necessarily listing profanity in the UI by default) and that custom words are additive, not a replacement
 
 **Custom Vocabulary** ([#40](https://github.com/nitesw/VoiceDrop_App/issues/40))
 - [ ] Editable list UI: add/remove words or phrases
