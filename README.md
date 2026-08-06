@@ -65,4 +65,34 @@ VOICEDROP_LANGUAGE=fr macos/.build/VoiceDrop.app/Contents/MacOS/VoiceDrop &
 
 Unset (default) means Whisper auto-detects the spoken language per utterance.
 
-**Temporary, to be removed:** the `Raw Transcript:`/`No transcript available.` logging in `HotkeyMonitor.swift` and the `VOICEDROP_LANGUAGE` env-var read in `main.swift` are Phase 2 debug scaffolding — Phase 3/4 replace them with real Cleanup Pass + injection wiring, and Phase 5's Settings Window replaces the env var with a real language picker. Don't build on top of either; they're going away.
+**Temporary, to be removed:** the `Raw Transcript:`/`Cleaned Transcript:` logging in `HotkeyMonitor.swift` and the `VOICEDROP_LANGUAGE`/`VOICEDROP_CLEANUP_PROVIDER`/`VOICEDROP_CLOUD_*` env-var reads in `main.swift` are Phase 2/3 debug scaffolding — Phase 4 replaces the logging with real injection wiring, and Phase 5's Settings Window replaces the env vars with real pickers. Don't build on top of either; they're going away.
+
+## Manual Cleanup Pass verification
+
+Phase 3 adds a Cleanup Pass on top of the Raw Transcript from Phase 2. Same caveat as above: no Settings Window yet, so provider selection is env vars.
+
+**Provider selection** (`VOICEDROP_CLEANUP_PROVIDER`, read at launch — run the binary directly, not via `open`, same reason as `VOICEDROP_LANGUAGE`):
+
+- `none` (default if unset) — Raw Transcript passes through unchanged, no model needed
+- `local` — a self-contained local llama.cpp Cleanup Pass, no external app required (see [ADR-0008](docs/adr/0008-local-cleanup-in-process-again.md)). Fetch a model first:
+  ```sh
+  ./scripts/download-cleanup-model.sh
+  ```
+  Saves Qwen2.5-1.5B-Instruct to `~/Library/Application Support/VoiceDrop/models/` — the default after manual comparison against Qwen2.5-0.5B (too weak) and Llama-3.2-3B (respected the `VerbatimClean` strength *less* than the smaller models). See `core/src/models.rs`'s `CATALOG` for other candidates — download the file yourself and set `VOICEDROP_LOCAL_MODEL_PATH` to its path to try one.
+- `cloud` — needs `VOICEDROP_CLOUD_BASE_URL`, `VOICEDROP_CLOUD_API_KEY`, `VOICEDROP_CLOUD_MODEL` set too. Works against any OpenAI-compatible endpoint (see [ADR-0005](docs/adr/0005-cleanup-pass-optional-and-free-form-endpoint.md)) — a real hosted provider, or **this is also how to bring your own model via Ollama or another local runner** instead of the built-in `local` option above:
+  ```sh
+  brew install ollama
+  ollama serve &
+  ollama pull qwen2.5:0.5b
+  VOICEDROP_CLEANUP_PROVIDER=cloud \
+    VOICEDROP_CLOUD_BASE_URL=http://localhost:11434/v1 \
+    VOICEDROP_CLOUD_API_KEY=unused \
+    VOICEDROP_CLOUD_MODEL=qwen2.5:0.5b \
+    macos/.build/VoiceDrop.app/Contents/MacOS/VoiceDrop &
+  ```
+
+Then hold the hotkey, speak, release, and watch the log stream (see above) for both `Raw Transcript:` and `Cleaned Transcript:` lines.
+
+**Word blocklist** (`VOICEDROP_BLOCKLIST`, comma-separated custom words, merged with a small built-in default list): runs unconditionally right after STT, regardless of which Cleanup Pass provider — including `none` — is selected. See `core/src/blocklist.rs`.
+
+**Important build note:** `whisper-rs` (STT) and `llama-cpp-2` (local Cleanup Pass) each vendor their own copy of ggml. Statically linking both causes ~600 duplicate-symbol errors at the *Swift app* link step specifically — `cargo build`/`cargo test` won't catch this, they tolerate it as warnings. `core/Cargo.toml` works around it via `llama-cpp-sys-2`'s `dynamic-link` feature, which needs matching linker flags in `macos/Package.swift` (`-lllama -lllama-common` plus an `-rpath` pointing at `target/release`, where the resulting `.dylib`s land). If you touch either dependency, rebuild the actual `.app` (`./scripts/build-macos-app.sh`) before considering it done — see [ADR-0006](docs/adr/0006-shared-ggml-symbol-collision-and-model-catalog.md) for the full story (and [ADR-0008](docs/adr/0008-local-cleanup-in-process-again.md) for why this workaround is in place rather than avoided). This is dev-only wiring; Phase 9 (distribution) still needs to bundle these dylibs into `Contents/Frameworks` properly.

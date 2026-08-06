@@ -45,6 +45,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "Language set to \(lang, privacy: .public) (status \(status, privacy: .public)).")
         }
 
+        // Phase 3 manual Cleanup Pass verification aid only (see
+        // 0004-phase3-cleanup-pass.md) — same rationale as VOICEDROP_LANGUAGE
+        // above. VOICEDROP_CLEANUP_PROVIDER is "none" (default)/"local"/"cloud".
+        // "local" is a self-contained in-process model (VOICEDROP_LOCAL_MODEL_PATH
+        // optional, defaults to the engine's built-in path — run
+        // scripts/download-cleanup-model.sh first). "cloud" needs
+        // VOICEDROP_CLOUD_BASE_URL, _API_KEY, _MODEL — also how to bring your
+        // own model via Ollama or another local runner (point base_url at
+        // its address).
+        if let providerName = ProcessInfo.processInfo.environment["VOICEDROP_CLEANUP_PROVIDER"] {
+            let env = ProcessInfo.processInfo.environment
+            let kind: Int32?
+            switch providerName {
+            case "none": kind = Int32(VOICEDROP_CLEANUP_NONE)
+            case "local": kind = Int32(VOICEDROP_CLEANUP_LOCAL)
+            case "cloud": kind = Int32(VOICEDROP_CLEANUP_CLOUD)
+            default:
+                voiceDropLog.log("Unknown VOICEDROP_CLEANUP_PROVIDER: \(providerName, privacy: .public)")
+                kind = nil
+            }
+            if let kind {
+                let status = voicedrop_engine_set_cleanup_provider(engine, kind)
+                voiceDropLog.log(
+                    "Cleanup provider set to \(providerName, privacy: .public) (status \(status, privacy: .public)).")
+
+                if providerName == "local", let path = env["VOICEDROP_LOCAL_MODEL_PATH"] {
+                    let localStatus = path.withCString {
+                        voicedrop_engine_set_cleanup_local_model_path(engine, $0)
+                    }
+                    voiceDropLog.log(
+                        "Local cleanup model path set to \(path, privacy: .public) (status \(localStatus, privacy: .public)).")
+                } else if providerName == "cloud" {
+                    let baseURL = env["VOICEDROP_CLOUD_BASE_URL"] ?? ""
+                    let apiKey = env["VOICEDROP_CLOUD_API_KEY"] ?? ""
+                    let model = env["VOICEDROP_CLOUD_MODEL"] ?? ""
+                    let cloudStatus = baseURL.withCString { urlPtr in
+                        apiKey.withCString { keyPtr in
+                            model.withCString { modelPtr in
+                                voicedrop_engine_set_cleanup_cloud_config(
+                                    engine, urlPtr, keyPtr, modelPtr)
+                            }
+                        }
+                    }
+                    voiceDropLog.log("Cloud cleanup config set (status \(cloudStatus, privacy: .public)).")
+                }
+            }
+        }
+
+        // Phase 3 manual Cleanup Strength testing aid only. VOICEDROP_CLEANUP_STRENGTH
+        // is "verbatim" (default)/"light"/"formal".
+        if let strengthName = ProcessInfo.processInfo.environment["VOICEDROP_CLEANUP_STRENGTH"] {
+            let strength: Int32?
+            switch strengthName {
+            case "verbatim": strength = Int32(VOICEDROP_STRENGTH_VERBATIM_CLEAN)
+            case "light": strength = Int32(VOICEDROP_STRENGTH_LIGHT_EDIT)
+            case "formal": strength = Int32(VOICEDROP_STRENGTH_FORMAL_REWRITE)
+            default:
+                voiceDropLog.log("Unknown VOICEDROP_CLEANUP_STRENGTH: \(strengthName, privacy: .public)")
+                strength = nil
+            }
+            if let strength {
+                let status = voicedrop_engine_set_cleanup_strength(engine, strength)
+                voiceDropLog.log(
+                    "Cleanup strength set to \(strengthName, privacy: .public) (status \(status, privacy: .public)).")
+            }
+        }
+
+        // Phase 3 manual blocklist verification aid only. Comma-separated
+        // custom words, merged with the built-in default list.
+        if let words = ProcessInfo.processInfo.environment["VOICEDROP_BLOCKLIST"] {
+            let status = words.withCString { voicedrop_engine_set_blocklist(engine, $0) }
+            voiceDropLog.log(
+                "Blocklist words set to \(words, privacy: .public) (status \(status, privacy: .public)).")
+        }
+
         let monitor = HotkeyMonitor(engine: engine)
         hotkeyMonitor = monitor
         if !monitor.start() {

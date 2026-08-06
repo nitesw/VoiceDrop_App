@@ -6,6 +6,10 @@ Scope: take the macOS app from "works on the happy path" to "safe to hand to a r
 
 ## Todos
 
+**Ad-hoc code signing causes intermittent hotkey failures after rebuild** ([#71](https://github.com/nitesw/VoiceDrop_App/issues/71)) (confirmed during Phase 3 manual testing, not yet a tracked issue — flagging here since it's exactly the risk [0002-phase1-audio-hotkey.md](0002-phase1-audio-hotkey.md) predicted)
+- [ ] Switch `scripts/build-macos-app.sh`'s ad-hoc `codesign --sign -` to a self-signed Keychain certificate with a stable identity. Observed failure mode: after `./scripts/build-macos-app.sh` re-signs the binary, the *first* launch sometimes arms the hotkey (logs "Control+Option+D hotkey armed") but never delivers key events — holding the hotkey produces no "Recording started" log at all. Killing and relaunching the same build fixes it. Root cause is believed to be TCC (Accessibility/Input Monitoring permission) keying its grant off the ad-hoc signature hash, which changes on every rebuild — the grant is technically valid but TCC's cache hasn't caught up by the time the tap is created. A stable signing identity means the hash doesn't change between rebuilds, so this class of flakiness should disappear
+- [ ] Once fixed, re-verify: rebuild, launch once, hotkey should work on the very first hold — no "kill and relaunch" workaround needed
+
 **Voice Commands** ([#42](https://github.com/nitesw/VoiceDrop_App/issues/42))
 - [ ] Extend the Cleanup Pass prompt to recognize the fixed *Voice Command* set (e.g. "scratch that", "new paragraph") from context, not exact phrase-matching
 - [ ] "Scratch that": discards the session entirely — no injection, no clipboard fallback, no *Session History* entry
