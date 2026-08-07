@@ -373,8 +373,32 @@ impl Engine {
         }
     }
 
+    /// Drops the cached Whisper transcriber and Cleanup Pass providers,
+    /// freeing whatever memory they hold (the Whisper model, and/or the
+    /// local llama.cpp GGUF model, up to a couple GB combined). They're
+    /// otherwise cached for the app's lifetime once loaded — see the
+    /// `transcriber`/`local_cleanup`/`cloud_cleanup` fields above — so
+    /// this exists purely for the Menu Bar Icon's Disable action, which
+    /// should actually release resources rather than only gate the
+    /// hotkey. Next use after this lazily reloads from disk, same as a
+    /// fresh launch.
+    fn unload_cached_models(&mut self) {
+        self.transcriber = None;
+        self.local_cleanup = None;
+        self.cloud_cleanup = None;
+    }
+
     fn state(&self) -> SessionState {
         self.session.state()
+    }
+
+    /// Current input level (0.0-1.0), for the Dictation HUD's live waveform.
+    /// 0.0 whenever not actively recording — there's nothing to meter.
+    fn current_input_level(&self) -> f32 {
+        self.capture
+            .as_ref()
+            .map(|c| c.current_level())
+            .unwrap_or(0.0)
     }
 }
 
@@ -489,11 +513,37 @@ pub unsafe extern "C" fn voicedrop_engine_reset(engine: *mut Engine) -> i32 {
 /// # Safety
 /// `engine` must be a valid, non-null pointer from `voicedrop_engine_new`.
 #[no_mangle]
+pub unsafe extern "C" fn voicedrop_engine_unload_models(engine: *mut Engine) {
+    let Some(engine) = engine.as_mut() else {
+        return;
+    };
+    engine.unload_cached_models();
+}
+
+/// # Safety
+/// `engine` must be a valid, non-null pointer from `voicedrop_engine_new`.
+#[no_mangle]
 pub unsafe extern "C" fn voicedrop_engine_state(engine: *const Engine) -> i32 {
     let Some(engine) = engine.as_ref() else {
         return -1;
     };
     state_code(engine.state())
+}
+
+/// Current input level (0.0-1.0) for the Dictation HUD's live waveform.
+/// Meant to be polled on a UI timer while `voicedrop_engine_state` reports
+/// `VOICEDROP_STATE_RECORDING`; returns 0.0 at all other times, and if
+/// `engine` is NULL.
+///
+/// # Safety
+/// `engine` must be a valid, non-null pointer from `voicedrop_engine_new`,
+/// or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn voicedrop_engine_current_input_level(engine: *const Engine) -> f32 {
+    let Some(engine) = engine.as_ref() else {
+        return 0.0;
+    };
+    engine.current_input_level()
 }
 
 /// Overrides the whisper.cpp model file path (defaults to a path under

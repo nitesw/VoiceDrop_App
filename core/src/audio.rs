@@ -120,6 +120,37 @@ impl AudioCapture {
         })
     }
 
+    /// Root-mean-square level of the most recently captured samples,
+    /// roughly normalized to 0.0-1.0 for a live waveform display (Phase 4's
+    /// Dictation HUD). Cheap `try_lock` + read, safe to poll frequently
+    /// from a UI timer without contending with the realtime audio thread —
+    /// if the lock is briefly held (mid-callback), this just returns the
+    /// previous read's staleness for one tick rather than blocking.
+    pub fn current_level(&self) -> f32 {
+        const WINDOW: usize = 2048;
+        let Ok(buf) = self.shared.samples.try_lock() else {
+            return 0.0;
+        };
+        let window = if buf.len() > WINDOW {
+            &buf[buf.len() - WINDOW..]
+        } else {
+            &buf[..]
+        };
+        if window.is_empty() {
+            return 0.0;
+        }
+        let sum_sq: f32 = window.iter().map(|s| s * s).sum();
+        let rms = (sum_sq / window.len() as f32).sqrt();
+        // Empirical scale + perceptual (square-root) curve: normal speech
+        // RMS sits well under 1.0 (full scale is clipping), and a linear
+        // mapping compresses that whole range into visually tiny meter
+        // movement. The sqrt curve is the standard level-meter trick for
+        // this — it stretches the quiet-to-moderate range (most speech)
+        // and compresses the already-loud range, so talking normally
+        // visibly swings the meter instead of just nudging it.
+        (rms * 6.0).clamp(0.0, 1.0).sqrt()
+    }
+
     /// Stops capture and returns mono 16 kHz f32 samples, ready for Phase 2.
     pub fn stop(self) -> Result<Vec<f32>, AudioError> {
         // Dropping the stream stops it; do that before reading the final
