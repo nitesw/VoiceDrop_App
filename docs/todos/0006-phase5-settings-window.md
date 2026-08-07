@@ -23,7 +23,7 @@ Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): 
 - [ ] Persist both settings; confirm they survive app relaunch
 
 **HUD position** ([#38](https://github.com/nitesw/VoiceDrop_App/issues/38))
-- [ ] Position picker UI (near cursor / bottom of screen / other screen edges) wired to the HUD positioning support built in Phase 4
+- [ ] Position picker UI (near cursor / bottom of screen / other screen edges) wired to the HUD positioning support built in Phase 4 — as of Phase 4, `DictationHUD.swift`'s `HUDPosition` enum only implements `.bottomCenter`, and nothing reads any position preference (there's no persisted config yet). This phase needs to both add the other position cases to the enum *and* build the actual config-read/persist plumbing — Phase 4 only got as far as the enum existing, not real plumbing
 - [ ] Live preview when changing position (show the HUD briefly at the new location)
 
 **Cleanup configuration** ([#39](https://github.com/nitesw/VoiceDrop_App/issues/39))
@@ -37,7 +37,7 @@ Visual design follows [docs/design/VISUAL_STYLE.md](../design/VISUAL_STYLE.md): 
 - [ ] "Download" button per not-yet-downloaded entry, calling `voicedrop_model_download` **off the main thread** — it blocks for the whole transfer (same rule as any other long-running core call, see the CGEventTap lesson in `HotkeyMonitor.swift`) — with a progress bar driven by the `on_progress` callback
 - [ ] "Delete" button per downloaded entry, calling `voicedrop_model_delete`; confirm before deleting the model currently in use
 - [ ] Selecting a model calls `voicedrop_model_path_for` then `voicedrop_engine_set_model_path`/`voicedrop_engine_set_cleanup_local_model_path` with the result
-- [ ] Handle "selected model isn't downloaded yet" — prompt to download rather than silently failing at the next Dictation Session
+- [ ] Handle "selected model isn't downloaded yet" — prompt to download rather than silently failing at the next Dictation Session. Carried over from Phase 4's first-run-provisioning todo: this is also where the local Cleanup Pass GGUF download-on-selection belongs — Phase 4 only gates the Whisper model before the hotkey is armed, and there was no provider-selection UI yet for a Cleanup Pass model to be triggered from. Now that this picker is the actual selection point, use it: picking "Built-in" for the first time (or picking a not-yet-downloaded catalog entry) should trigger the same visible-progress download flow as Whisper's, scoped to just that model — not bundled into the app-launch gate, since `None`/cloud users should never see it
 - [ ] For "Custom endpoint" pointed at Ollama specifically: suggest names from `voicedrop_ollama_model_*` (Ollama itself handles the actual `ollama pull`, VoiceDrop doesn't manage that download)
 
 **Word blocklist** ([#70](https://github.com/nitesw/VoiceDrop_App/issues/70)) (backing Rust plumbing already built in Phase 3 — `voicedrop_engine_set_blocklist`, `core/src/blocklist.rs`)

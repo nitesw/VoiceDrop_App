@@ -291,8 +291,21 @@ int32_t voicedrop_engine_write_verification_wav(VoiceDropEngine *engine, const c
  * for the next Dictation Session. */
 int32_t voicedrop_engine_reset(VoiceDropEngine *engine);
 
+/* Drops the cached Whisper transcriber and Cleanup Pass providers, freeing
+ * whatever memory they hold (the Whisper model, and/or the local llama.cpp
+ * GGUF model). Next use after this lazily reloads from disk, same as a
+ * fresh launch — call when the app is disabled and should stop holding
+ * onto loaded models, not during a normal session. */
+void voicedrop_engine_unload_models(VoiceDropEngine *engine);
+
 /* Returns the engine's current VOICEDROP_STATE_* value, or -1 if `engine`
  * is NULL. */
 int32_t voicedrop_engine_state(const VoiceDropEngine *engine);
+
+/* Current input level (0.0-1.0) for the Dictation HUD's live waveform.
+ * Meant to be polled on a UI timer while voicedrop_engine_state reports
+ * VOICEDROP_STATE_RECORDING; returns 0.0 at all other times, and if
+ * `engine` is NULL. */
+float voicedrop_engine_current_input_level(const VoiceDropEngine *engine);
 
 #endif /* VOICEDROP_CORE_H */

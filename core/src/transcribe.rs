@@ -80,6 +80,53 @@ fn build_initial_prompt(vocabulary: &[String]) -> Option<String> {
     }
 }
 
+/// Known literal placeholder tokens whisper.cpp emits *as transcribed text*
+/// for silent/non-speech audio, instead of just returning nothing — e.g.
+/// `[BLANK_AUDIO]` observed in practice. Without filtering these, they slip
+/// past the empty-string check as if they were real speech and get handed
+/// to the Cleanup Pass / injected verbatim, which is never correct output.
+const BLANK_AUDIO_MARKERS: &[&str] = &[
+    "[blank_audio]",
+    "[silence]",
+    "[no speech]",
+    "[no audio]",
+    "(silence)",
+    "(inaudible)",
+    "[inaudible]",
+];
+
+/// True if `text` (already trimmed) is nothing but one of Whisper's known
+/// non-speech placeholder markers, or generically looks like one: entirely
+/// wrapped in a single matching pair of bracket-like delimiters with
+/// nothing outside them. The generic check is a catch-all for marker
+/// variants not in the curated list above — this whole family of Whisper
+/// output shares that wrapped shape, whether it's `[BLANK_AUDIO]`,
+/// `(inaudible)`, or `*laughter*`/`*maniacal chatter*` (Whisper's
+/// asterisk-wrapped style for describing non-speech sounds — laughter,
+/// music, background chatter — instead of transcribing words).
+fn is_blank_audio_marker(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if BLANK_AUDIO_MARKERS.contains(&lower.as_str()) {
+        return true;
+    }
+    const DELIMITER_PAIRS: &[(char, char)] = &[('[', ']'), ('(', ')'), ('*', '*')];
+    DELIMITER_PAIRS.iter().any(|&(open, close)| {
+        if !text.starts_with(open) || !text.ends_with(close) || text.len() <= 1 {
+            return false;
+        }
+        // When open == close (asterisk-style), the pair shares one count;
+        // otherwise count each delimiter separately — either way, "nothing
+        // outside the wrapping pair" means exactly 2 delimiter characters
+        // total.
+        let delimiter_count = if open == close {
+            text.matches(open).count()
+        } else {
+            text.matches(open).count() + text.matches(close).count()
+        };
+        delimiter_count == 2
+    })
+}
+
 /// Loads a whisper.cpp model once and transcribes buffers against it.
 /// Loading is expensive (seconds), so callers should keep one `Transcriber`
 /// alive across sessions rather than reloading per-utterance.
@@ -144,13 +191,58 @@ impl Transcriber {
             text.push_str(&segment);
         }
 
-        Ok(text.trim().to_string())
+        let text = text.trim().to_string();
+        if is_blank_audio_marker(&text) {
+            return Ok(String::new());
+        }
+        Ok(text)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recognizes_known_blank_audio_markers_case_insensitively() {
+        assert!(is_blank_audio_marker("[BLANK_AUDIO]"));
+        assert!(is_blank_audio_marker("[blank_audio]"));
+        assert!(is_blank_audio_marker("(inaudible)"));
+    }
+
+    #[test]
+    fn recognizes_unlisted_bracketed_markers_generically() {
+        assert!(is_blank_audio_marker("[background noise]"));
+        assert!(is_blank_audio_marker("(coughing)"));
+    }
+
+    #[test]
+    fn recognizes_asterisk_wrapped_markers() {
+        assert!(is_blank_audio_marker("*laughter*"));
+        assert!(is_blank_audio_marker("*Maniacal chatter*"));
+        assert!(is_blank_audio_marker("*music playing*"));
+    }
+
+    #[test]
+    fn does_not_flag_text_containing_asterisks_mid_sentence() {
+        // A real sentence that merely mentions asterisks shouldn't be
+        // mistaken for a wrapped marker: it doesn't start AND end with '*',
+        // and/or has more than two '*' characters total.
+        assert!(!is_blank_audio_marker("use a * to multiply, like 2 * 3"));
+    }
+
+    #[test]
+    fn does_not_flag_real_speech() {
+        assert!(!is_blank_audio_marker("Hello, how are you?"));
+        assert!(!is_blank_audio_marker("I said (by the way) that it works"));
+    }
+
+    #[test]
+    fn does_not_flag_empty_string() {
+        // Empty is handled separately (already means no-speech) — the
+        // marker check is about non-empty placeholder text specifically.
+        assert!(!is_blank_audio_marker(""));
+    }
 
     fn samples_of_duration_ms(ms: u64) -> Vec<f32> {
         vec![0.0; (WHISPER_SAMPLE_RATE as u64 * ms / 1000) as usize]

@@ -25,10 +25,14 @@ let package = Package(
         .executableTarget(
             name: "VoiceDrop",
             dependencies: ["CVoiceDropCore"],
-            // MenuBarIcon.png/@2x/@3x (Resources/) — a monochrome template
-            // image staged for Phase 4's Menu Bar Icon (NSStatusItem), not
-            // wired up yet. Access via Bundle.module once that phase starts.
-            resources: [.copy("Resources")],
+            // MenuBarIcon.png/@2x/@3x live in ../Resources (sibling of
+            // Sources/, not a SwiftPM target resource): SwiftPM's generated
+            // Bundle.module accessor expects its resource bundle directly
+            // at the .app root, which breaks `codesign --verify --deep
+            // --strict` (see docs/todos/0005-phase4-macos-core-loop.md).
+            // scripts/build-macos-app.sh copies them straight into
+            // Contents/Resources/ instead, alongside AppIcon.icns;
+            // MenuBarIconLoader.swift loads them by direct file path.
             linkerSettings: [
                 // Requires `cargo build --release` to have run first, producing
                 // ../target/release/libvoicedrop_core.a (see README build steps).
