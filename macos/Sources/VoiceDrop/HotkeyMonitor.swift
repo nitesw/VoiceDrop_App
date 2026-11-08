@@ -64,7 +64,7 @@ final class HotkeyMonitor {
     private var languageKeyIsDown = false
     /// The language applied to the engine at the start of each recording.
     /// Changing it mid-transcription never touches the engine directly —
-    /// see `handleKeyDown`.
+    /// see `startRecording`.
     private(set) var language = DictationLanguage.saved
     /// Hold vs. tap-to-toggle, set from the menu bar. Only read on a
     /// key event, so changing it between recordings needs nothing else.
@@ -101,6 +101,19 @@ final class HotkeyMonitor {
     /// as a property (rather than threaded through the async chain) since
     /// there's only ever one session in flight at a time.
     private var injectionTarget: InjectionTarget?
+    /// Where the current session is, tracked here on the main thread so the
+    /// event tap never has to ask the engine (which is busy on
+    /// `engineQueue`) and a second tap that arrives while the mic is still
+    /// starting up is still understood as "stop".
+    private enum SessionPhase { case idle, starting, recording, processing }
+    private var phase = SessionPhase.idle
+    /// Every engine call that can be slow (opening the mic, stopping,
+    /// transcribing, unloading) runs here, one at a time, so the order is
+    /// kept and the engine is only ever driven from one thread. None of it
+    /// may run in the event tap callback: a cold mic start alone took ~2s,
+    /// long enough for macOS to disable the tap mid-recording, after which
+    /// the second tap never arrived and the recording couldn't be stopped.
+    private let engineQueue = DispatchQueue(label: "com.voicedrop.engine", qos: .userInitiated)
 
     init(engine: OpaquePointer, hud: DictationHUDController) {
         self.engine = engine
@@ -140,7 +153,7 @@ final class HotkeyMonitor {
                     // through unswallowed, which is exactly the "hotkey leaks
                     // through as raw input" symptom. Re-enable immediately;
                     // this is Apple's documented recovery path. The real fix is
-                    // keeping the callback itself fast (see handleKeyUp), this
+                    // keeping the callback itself fast (see engineQueue), this
                     // is just the safety net.
                     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                         // Diagnostic: per Apple's docs, .tapDisabledByUserInput is
@@ -198,29 +211,17 @@ final class HotkeyMonitor {
     /// WindowServer eats a timeout on every key event, which is what makes
     /// the whole Mac lag with VoiceDrop still "running" in the background.
     ///
-    /// So: never re-enable without trust. And never re-enable at all on a
-    /// `.tapDisabledByTimeout` while trust is anything but certain — our
-    /// callback is trivially fast and has run for hours without ever
-    /// timing out under normal conditions, so a timeout occurring right
-    /// after an Accessibility revocation isn't a one-off slow callback,
-    /// it's every keystroke hanging inside the tap before it ever reaches
-    /// our code (observed: repeated ~9-12s gaps between timeouts, each
-    /// presumably one hung keystroke). Re-arming just buys another full
-    /// hang cycle for free. `.tapDisabledByUserInput` doesn't have that
-    /// same evidence behind it yet, so it still gets one retry via the
-    /// rate-limited path below rather than an immediate teardown.
+    /// So: never re-enable without trust. With trust, a disable (timeout
+    /// or user input) gets re-armed, but only once per
+    /// `tapDisableSpinWindow`: a second one soon after means it's spinning
+    /// (as after an Accessibility revocation, observed as repeated ~9-12s
+    /// timeouts), so tear down then. Tearing down on the *first* timeout
+    /// was tried and was worse: one slow callback (a cold mic start)
+    /// switched the hotkey off until relaunch, mid-recording.
     private func handleTapDisabled(isTimeout: Bool) {
         guard AXIsProcessTrusted() else {
             voiceDropLog.log(
                 "Event tap disabled and Accessibility trust is gone — tearing down instead of re-arming. Re-grant Accessibility and relaunch."
-            )
-            teardownTap()
-            return
-        }
-
-        if isTimeout {
-            voiceDropLog.log(
-                "Event tap disabled by timeout — tearing down immediately rather than re-arming into another hang cycle."
             )
             teardownTap()
             return
@@ -256,22 +257,22 @@ final class HotkeyMonitor {
         guard isEnabled != enabled else { return }
         isEnabled = enabled
 
-        guard let tap = eventTap else { return }
-        CGEvent.tapEnable(tap: tap, enable: enabled)
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: enabled)
+        }
 
         guard !enabled else { return }
         // With the tap off, nothing could ever stop a recording that's
         // running (e.g. a toggle-mode one), so finish it now as if stopped.
         hotkeyIsDown = false
         languageKeyIsDown = false
-        handleKeyUp()
-        if voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE {
+        stopRecording()
+        // Queued behind any session in flight, so its models stay loaded
+        // until it has finished.
+        let engine = self.engine
+        engineQueue.async {
             voicedrop_engine_unload_models(engine)
             voiceDropLog.log("Disabled — event tap stopped and cached models unloaded.")
-        } else {
-            voiceDropLog.log(
-                "Disabled — event tap stopped, but a session is in flight, so its models stay loaded until it finishes."
-            )
         }
     }
 
@@ -318,19 +319,17 @@ final class HotkeyMonitor {
                     hotkeyIsDown = false
                     // In hold mode the lost release would have stopped the
                     // recording; in toggle mode releases do nothing.
-                    if recordingMode == .hold { handleKeyUp() }
+                    if recordingMode == .hold { stopRecording() }
                 }
             }
 
             let modifiers = event.flags.intersection(hotkeyModifiers)
             if modifiers == .maskAlternate {
                 hotkeyIsDown = true
-                if recordingMode == .toggle,
-                    voicedrop_engine_state(engine) == VOICEDROP_STATE_RECORDING
-                {
-                    handleKeyUp()  // second tap: stop and transcribe
+                if recordingMode == .toggle, phase == .starting || phase == .recording {
+                    stopRecording()  // second tap: stop and transcribe
                 } else {
-                    handleKeyDown()
+                    startRecording()
                 }
                 return true
             }
@@ -351,7 +350,7 @@ final class HotkeyMonitor {
             hotkeyIsDown = false
             // Releasing stops the recording only in hold mode; in toggle
             // mode the next tap does.
-            if recordingMode == .hold { handleKeyUp() }
+            if recordingMode == .hold { stopRecording() }
             return true
         default:
             return false
@@ -366,31 +365,42 @@ final class HotkeyMonitor {
         language = language.next
         language.save()
         voiceDropLog.log("Dictation language: \(self.language.displayName, privacy: .public).")
-        if voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE {
+        if phase == .idle {
             hud.show(.language(name: language.displayName), autoDismissAfter: 1.0)
         }
     }
 
-    private func handleKeyDown() {
-        // Guard against key-repeat re-triggering while already recording —
-        // only attempt the transition from Idle.
-        guard voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE else { return }
-
-        // Apply the current language now, while the engine is Idle: nothing
-        // else is reading its config at this point (a previous session's
-        // transcription has finished and been reset).
-        _ = applyLanguage(to: engine, language)
+    /// Called from the event tap, so it only records intent and hands the
+    /// slow part (opening the mic) to `engineQueue` — see its doc.
+    private func startRecording() {
+        guard phase == .idle else { return }
+        phase = .starting
 
         // Capture the Injection Target now — fixed for the session even if
         // focus later changes (see TextInjector's doc).
         injectionTarget = TextInjector.captureCurrentTarget()
 
-        let status = voicedrop_engine_start_recording(engine)
-        if status == VOICEDROP_OK {
-            voiceDropLog.log("Recording started.")
-            startLevelPolling()
-        } else {
-            voiceDropLog.log("Failed to start recording (status \(status, privacy: .public)).")
+        let engine = self.engine
+        let language = self.language
+        engineQueue.async { [weak self] in
+            // The engine is Idle here: nothing else is reading its config
+            // (a previous session has finished and been reset).
+            applyLanguage(to: engine, language)
+            let status = voicedrop_engine_start_recording(engine)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if status == VOICEDROP_OK {
+                    voiceDropLog.log("Recording started.")
+                    // Unless a stop was already requested while starting.
+                    if self.phase == .starting {
+                        self.phase = .recording
+                        self.startLevelPolling()
+                    }
+                } else {
+                    voiceDropLog.log("Failed to start recording (status \(status, privacy: .public)).")
+                    if self.phase == .starting { self.phase = .idle }
+                }
+            }
         }
     }
 
@@ -414,15 +424,14 @@ final class HotkeyMonitor {
         levelTimer = nil
     }
 
-    private func handleKeyUp() {
-        // Only this state check runs on the tap's callback thread — it's
-        // cheap. Everything else (stopping capture, running Whisper, which
-        // can take several seconds) is dispatched off this thread. A
-        // CGEventTap callback that blocks gets disabled by the system
-        // watchdog, which is what silently broke the hotkey after one
-        // successful recording: voicedrop_engine_stop_recording used to run
-        // Whisper synchronously right here.
-        guard voicedrop_engine_state(engine) == VOICEDROP_STATE_RECORDING else { return }
+    /// Called from the event tap, so, like `startRecording`, everything
+    /// slow (stopping capture, running Whisper, which can take several
+    /// seconds) runs on `engineQueue`. A tap callback that blocks gets
+    /// disabled by the system watchdog. Queued after the start, so a stop
+    /// requested while the mic is still opening waits for it.
+    private func stopRecording() {
+        guard phase == .starting || phase == .recording else { return }
+        phase = .processing
 
         stopLevelPolling()
         let target = injectionTarget
@@ -430,27 +439,38 @@ final class HotkeyMonitor {
 
         let engine = self.engine
         let hud = self.hud
-        DispatchQueue.global(qos: .userInitiated).async {
+        engineQueue.async { [weak self] in
+            let finish: (@escaping () -> Void) -> Void = { ui in
+                DispatchQueue.main.async {
+                    self?.phase = .idle
+                    ui()
+                }
+            }
+
+            // The start failed, so there's nothing to stop.
+            guard voicedrop_engine_state(engine) == VOICEDROP_STATE_RECORDING else {
+                finish { hud.hide() }
+                return
+            }
+
             let status = voicedrop_engine_stop_recording(engine)
             if status == VOICEDROP_NO_SPEECH {
                 voiceDropLog.log("No speech detected — audio was silent or too short to transcribe.")
                 _ = voicedrop_engine_reset(engine)
-                DispatchQueue.main.async { hud.show(.noSpeech, autoDismissAfter: 1.5) }
+                finish { hud.show(.noSpeech, autoDismissAfter: 1.5) }
                 return
             }
             guard status == VOICEDROP_OK else {
                 voiceDropLog.log("Recording stopped with error (status \(status, privacy: .public)).")
                 _ = voicedrop_engine_reset(engine)
-                DispatchQueue.main.async {
-                    hud.show(.error(message: "Something went wrong"), autoDismissAfter: 2.0)
-                }
+                finish { hud.show(.error(message: "Something went wrong"), autoDismissAfter: 2.0) }
                 return
             }
 
             guard let transcriptCString = voicedrop_engine_last_transcript(engine) else {
                 voiceDropLog.log("No transcript available.")
                 _ = voicedrop_engine_reset(engine)
-                DispatchQueue.main.async { hud.hide() }
+                finish { hud.hide() }
                 return
             }
             let transcript = String(cString: transcriptCString)
@@ -458,7 +478,7 @@ final class HotkeyMonitor {
 
             _ = voicedrop_engine_reset(engine)
 
-            DispatchQueue.main.async {
+            finish {
                 let outcome = TextInjector.inject(transcript, into: target ?? TextInjector.captureCurrentTarget())
                 switch outcome {
                 case .injected:
