@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor?
     private var menuBar: MenuBarController?
     private let hud = DictationHUDController()
+    private var trustWaitTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar-only app: no Dock icon, no main window.
@@ -72,11 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 if success {
                     self.hud.hide()
-                    if !monitor.start() {
-                        voiceDropLog.log(
-                            "Grant Accessibility/Input Monitoring permission in System Settings, then relaunch."
-                        )
-                    }
+                    self.armWhenTrusted(monitor: monitor)
                 } else if attempt < maxAttempts {
                     let delay = Double(attempt) * 5
                     voiceDropLog.log(
@@ -93,6 +90,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         )
+    }
+
+    /// Arms the hotkeys, or — if Accessibility isn't allowed yet — says so
+    /// on the HUD and arms them by itself the moment it is, so there's no
+    /// need to relaunch. `monitor.start()` also triggers macOS's own
+    /// "allow Accessibility" prompt, which links to the right settings page.
+    private func armWhenTrusted(monitor: HotkeyMonitor) {
+        if monitor.start() { return }
+
+        voiceDropLog.log("Waiting for Accessibility permission.")
+        hud.show(.error(message: "Allow VoiceDrop in System Settings → Accessibility"))
+        trustWaitTimer?.invalidate()
+        trustWaitTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard AXIsProcessTrusted() else { return }
+            timer.invalidate()
+            self?.trustWaitTimer = nil
+            self?.hud.hide()
+            if !monitor.start() {
+                voiceDropLog.log("Accessibility allowed, but the event tap still failed to start.")
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -1,13 +1,15 @@
 import AppKit
+import ServiceManagement
 
 /// The persistent Menu Bar Icon (`NSStatusItem`). Single click opens a
-/// dropdown: Enable/Disable toggle and Quit. There is no Settings window by
+/// dropdown: Enable/Disable toggle, Launch at Login, and Quit. There is no Settings window by
 /// design (ADR-0009) — everything else is hotkey-driven. Enabled/disabled state is
 /// reflected via the button's opacity (`appearsDisabled`), never by
 /// introducing color, per VISUAL_STYLE.md.
 final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let enabledMenuItem = NSMenuItem()
+    private let launchAtLoginItem = NSMenuItem()
 
     /// Called whenever the user toggles Enabled/Disabled from the dropdown.
     /// The caller (main.swift) is responsible for actually suspending the
@@ -45,6 +47,10 @@ final class MenuBarController: NSObject {
         enabledMenuItem.action = #selector(toggleEnabled)
         menu.addItem(enabledMenuItem)
 
+        launchAtLoginItem.title = "Launch at Login"
+        launchAtLoginItem.target = self
+        launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
+        menu.addItem(launchAtLoginItem)
 
         menu.addItem(.separator())
 
@@ -61,12 +67,35 @@ final class MenuBarController: NSObject {
         onToggleEnabled?(isEnabled)
     }
 
+    /// Registers/unregisters the app itself as a login item via
+    /// `SMAppService` (macOS 13+). macOS remembers this per app location, so
+    /// it's meant for the copy installed in /Applications.
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            voiceDropLog.log("Launch at Login change failed: \(error.localizedDescription, privacy: .public)")
+        }
+        if service.status == .requiresApproval {
+            // The user turned VoiceDrop off in System Settings → Login Items
+            // before; only they can turn it back on there.
+            SMAppService.openSystemSettingsLoginItems()
+        }
+        updateAppearance()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
 
     private func updateAppearance() {
         enabledMenuItem.state = isEnabled ? .on : .off
+        launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         statusItem.button?.appearsDisabled = !isEnabled
     }
 }
