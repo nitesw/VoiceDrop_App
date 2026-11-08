@@ -152,9 +152,11 @@ impl Transcriber {
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
 
-        if let Some(lang) = resolve_language(config, samples) {
-            params.set_language(Some(lang));
-        }
+        // Always set this explicitly: whisper-rs defaults to "en" when it's
+        // never called, so leaving it unset for auto-detect silently forced
+        // English — and Whisper given non-English audio with language "en"
+        // *translates* it instead of transcribing. `None` means auto-detect.
+        params.set_language(resolve_language(config, samples));
 
         state
             .full(params, samples)
