@@ -169,11 +169,7 @@ impl AudioCapture {
             .clone();
 
         let mono = downmix_to_mono(&captured, self.input_channels);
-        Ok(resample_linear(
-            &mono,
-            self.input_sample_rate,
-            WHISPER_SAMPLE_RATE,
-        ))
+        Ok(resample(&mono, self.input_sample_rate, WHISPER_SAMPLE_RATE))
     }
 }
 
@@ -188,53 +184,64 @@ fn downmix_to_mono(samples: &[f32], channels: u16) -> Vec<f32> {
         .collect()
 }
 
-/// Simple linear-interpolation resampler. Good enough for the Phase 1 "does
-/// intelligible audio reach the core" verification; revisit if whisper.cpp
-/// transcription quality in Phase 2 suggests it's not good enough.
-fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
+/// Band-limited resampler (windowed-sinc interpolation). The mic usually
+/// records at 44.1/48 kHz; Whisper wants 16 kHz. Plain linear interpolation
+/// (what Phase 1 used) folds everything above 8 kHz back into the audible
+/// band as noise (aliasing), which costs recognition accuracy. This low-pass
+/// filters at the output's Nyquist frequency while interpolating, so only
+/// the band Whisper can actually use survives.
+pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
     if from_rate == to_rate || samples.is_empty() {
         return samples.to_vec();
     }
     let ratio = from_rate as f64 / to_rate as f64;
+    // Cutoff relative to the input Nyquist frequency, a little below the
+    // output Nyquist so the filter's transition band stays out of aliasing
+    // range. 1.0 when upsampling (nothing to remove).
+    let cutoff = 0.95 * (1.0 / ratio).min(1.0);
+    // Kernel half-width in input samples: ~16 sinc zero-crossings per side.
+    let half_width = 16.0 / cutoff;
     let out_len = ((samples.len() as f64) / ratio).floor() as usize;
     let mut out = Vec::with_capacity(out_len);
     for i in 0..out_len {
-        let src_pos = i as f64 * ratio;
-        let idx = src_pos.floor() as usize;
-        let frac = (src_pos - idx as f64) as f32;
-        let a = samples[idx];
-        let b = *samples.get(idx + 1).unwrap_or(&a);
-        out.push(a + (b - a) * frac);
+        let center = i as f64 * ratio;
+        let first = (center - half_width).ceil().max(0.0) as usize;
+        let last = ((center + half_width).floor() as usize).min(samples.len() - 1);
+        let mut acc = 0.0;
+        let mut weight_sum = 0.0;
+        for (j, &sample) in samples.iter().enumerate().take(last + 1).skip(first) {
+            let t = j as f64 - center;
+            let weight = sinc(cutoff * t) * hann(t / half_width);
+            acc += sample as f64 * weight;
+            weight_sum += weight;
+        }
+        // Normalizing by the summed weights keeps unity gain everywhere,
+        // including near the buffer edges where the kernel is truncated.
+        out.push(if weight_sum.abs() > f64::EPSILON {
+            (acc / weight_sum) as f32
+        } else {
+            0.0
+        });
     }
     out
 }
 
-/// Writes 16-bit PCM mono WAV for human-listening verification (see the
-/// Phase 1 "Done when" — a log line proves nothing, listening to the file
-/// does). Not the format handed to whisper.cpp; this is purely a debug aid.
-pub fn write_verification_wav(
-    samples: &[f32],
-    sample_rate: u32,
-    path: &std::path::Path,
-) -> std::io::Result<()> {
-    let spec = hound::WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut writer =
-        hound::WavWriter::create(path, spec).map_err(|e| std::io::Error::other(e.to_string()))?;
-    for &s in samples {
-        let clamped = s.clamp(-1.0, 1.0);
-        writer
-            .write_sample((clamped * i16::MAX as f32) as i16)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+fn sinc(x: f64) -> f64 {
+    if x.abs() < 1e-9 {
+        1.0
+    } else {
+        let px = std::f64::consts::PI * x;
+        px.sin() / px
     }
-    writer
-        .finalize()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    Ok(())
+}
+
+/// Hann window over [-1, 1], zero outside.
+fn hann(x: f64) -> f64 {
+    if x.abs() >= 1.0 {
+        0.0
+    } else {
+        0.5 * (1.0 + (std::f64::consts::PI * x).cos())
+    }
 }
 
 #[cfg(test)]
@@ -257,29 +264,53 @@ mod tests {
     #[test]
     fn resample_same_rate_is_passthrough() {
         let samples = vec![0.1, 0.2, 0.3];
-        assert_eq!(resample_linear(&samples, 16_000, 16_000), samples);
+        assert_eq!(resample(&samples, 16_000, 16_000), samples);
     }
 
     #[test]
     fn resample_downsamples_to_expected_length() {
         // 48kHz -> 16kHz is a 3:1 ratio.
         let samples = vec![0.0; 4800];
-        let out = resample_linear(&samples, 48_000, 16_000);
+        let out = resample(&samples, 48_000, 16_000);
         assert_eq!(out.len(), 1600);
     }
 
-    #[test]
-    fn write_verification_wav_roundtrips_sample_count() {
-        let dir = std::env::temp_dir();
-        let path = dir.join("voicedrop_test_verification.wav");
-        let samples = vec![0.0_f32, 0.5, -0.5, 1.0, -1.0];
-        write_verification_wav(&samples, WHISPER_SAMPLE_RATE, &path).unwrap();
+    fn sine(freq: f64, rate: u32, seconds: f64) -> Vec<f32> {
+        let n = (rate as f64 * seconds) as usize;
+        (0..n)
+            .map(|i| (2.0 * std::f64::consts::PI * freq * i as f64 / rate as f64).sin() as f32)
+            .collect()
+    }
 
-        let mut reader = hound::WavReader::open(&path).unwrap();
-        assert_eq!(reader.spec().sample_rate, WHISPER_SAMPLE_RATE);
-        assert_eq!(reader.spec().channels, 1);
-        assert_eq!(reader.len() as usize, samples.len());
-        let _ = reader.samples::<i16>().count();
-        std::fs::remove_file(&path).ok();
+    /// RMS over the middle of the buffer, away from edge effects.
+    fn middle_rms(samples: &[f32]) -> f32 {
+        let mid = &samples[samples.len() / 4..samples.len() * 3 / 4];
+        (mid.iter().map(|s| s * s).sum::<f32>() / mid.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn resample_keeps_dc_level() {
+        let out = resample(&vec![0.5; 4800], 48_000, 16_000);
+        assert!(out.iter().all(|s| (s - 0.5).abs() < 1e-3));
+    }
+
+    #[test]
+    fn resample_keeps_speech_band_tone() {
+        // 1 kHz is well inside the 0-8 kHz band 16 kHz audio can carry.
+        let out = resample(&sine(1_000.0, 48_000, 0.5), 48_000, 16_000);
+        let rms = middle_rms(&out);
+        assert!(
+            (rms - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.02,
+            "rms {rms}"
+        );
+    }
+
+    #[test]
+    fn resample_removes_tone_above_output_nyquist() {
+        // 12 kHz can't exist at 16 kHz. Linear interpolation would fold it
+        // down to an audible 4 kHz alias; a proper resampler removes it.
+        let out = resample(&sine(12_000.0, 48_000, 0.5), 48_000, 16_000);
+        let rms = middle_rms(&out);
+        assert!(rms < 0.01, "aliased energy left: rms {rms}");
     }
 }

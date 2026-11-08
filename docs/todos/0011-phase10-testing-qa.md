@@ -1,5 +1,7 @@
 # Phase 10 — Testing, Quality Assurance & Performance Tuning
 
+> **Deferred by [ADR-0009](../adr/0009-simplify-to-hold-speak-paste.md)** (2026-11-08): not being built. VoiceDrop was simplified to hold ⌥Space, speak, paste. This doc stays as the detailed thinking if any item here comes back; see the ADR's "Deferred" table.
+
 Tracks [GitHub issue #11](https://github.com/nitesw/VoiceDrop_App/issues/11). Deliberately last: exercises everything built in Phases 1–9. Terms in *italics* refer to [CONTEXT.md](../../CONTEXT.md).
 
 Scope: verify the whole system holds up, not just that each phase's own manual checks passed in isolation.

@@ -1,5 +1,7 @@
 # Phase 5 — macOS Shell: Settings Window & Persisted History
 
+> **Deferred by [ADR-0009](../adr/0009-simplify-to-hold-speak-paste.md)** (2026-11-08): not being built. VoiceDrop was simplified to hold ⌥Space, speak, paste. This doc stays as the detailed thinking if any item here comes back; see the ADR's "Deferred" table.
+
 Tracks [GitHub issue #6](https://github.com/nitesw/VoiceDrop_App/issues/6). Depends on [0005-phase4-macos-core-loop.md](0005-phase4-macos-core-loop.md) (core loop works with hardcoded defaults). Terms in *italics* refer to [CONTEXT.md](../../CONTEXT.md).
 
 Scope: move every hardcoded default from Phase 4 into user-configurable preferences, and add persisted *Session History*. No new pipeline behavior — this phase is entirely about surfacing and storing configuration.

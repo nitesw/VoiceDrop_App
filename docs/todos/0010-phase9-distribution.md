@@ -1,5 +1,7 @@
 # Phase 9 — Distribution, Packaging & Auto-Updates
 
+> **Deferred by [ADR-0009](../adr/0009-simplify-to-hold-speak-paste.md)** (2026-11-08): not being built. VoiceDrop was simplified to hold ⌥Space, speak, paste. This doc stays as the detailed thinking if any item here comes back; see the ADR's "Deferred" table.
+
 Tracks [GitHub issue #10](https://github.com/nitesw/VoiceDrop_App/issues/10). Depends on all three shells being feature-complete ([0007](0007-phase6-robustness.md), [0008](0008-phase7-windows-shell.md), [0009](0009-phase8-linux-shell.md)). Architecture rationale: [ADR-0003](../adr/0003-direct-download-distribution-on-macos.md).
 
 Scope: get VoiceDrop into users' hands on each platform, with a working update path — no new product features here.

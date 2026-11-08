@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor?
     private var menuBar: MenuBarController?
     private let hud = DictationHUDController()
+    private var trustWaitTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar-only app: no Dock icon, no main window.
@@ -37,93 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.engine = engine
 
-        // Phase 2 manual language-quality testing aid only (see
-        // 0003-phase2-stt.md) — Phase 5's Settings Window is the real,
-        // permanent way to set this. VOICEDROP_LANGUAGE takes an ISO 639-1
-        // code (e.g. "fr", "uk", "pl"); unset means auto-detect.
-        if let lang = ProcessInfo.processInfo.environment["VOICEDROP_LANGUAGE"] {
-            let status = lang.withCString { voicedrop_engine_set_language(engine, $0) }
-            voiceDropLog.log(
-                "Language set to \(lang, privacy: .public) (status \(status, privacy: .public)).")
-        }
-
-        // Phase 3 manual Cleanup Pass verification aid only (see
-        // 0004-phase3-cleanup-pass.md) — same rationale as VOICEDROP_LANGUAGE
-        // above. VOICEDROP_CLEANUP_PROVIDER is "none" (default)/"local"/"cloud".
-        // "local" is a self-contained in-process model (VOICEDROP_LOCAL_MODEL_PATH
-        // optional, defaults to the engine's built-in path — run
-        // scripts/download-cleanup-model.sh first). "cloud" needs
-        // VOICEDROP_CLOUD_BASE_URL, _API_KEY, _MODEL — also how to bring your
-        // own model via Ollama or another local runner (point base_url at
-        // its address).
-        if let providerName = ProcessInfo.processInfo.environment["VOICEDROP_CLEANUP_PROVIDER"] {
-            let env = ProcessInfo.processInfo.environment
-            let kind: Int32?
-            switch providerName {
-            case "none": kind = Int32(VOICEDROP_CLEANUP_NONE)
-            case "local": kind = Int32(VOICEDROP_CLEANUP_LOCAL)
-            case "cloud": kind = Int32(VOICEDROP_CLEANUP_CLOUD)
-            default:
-                voiceDropLog.log("Unknown VOICEDROP_CLEANUP_PROVIDER: \(providerName, privacy: .public)")
-                kind = nil
-            }
-            if let kind {
-                let status = voicedrop_engine_set_cleanup_provider(engine, kind)
-                voiceDropLog.log(
-                    "Cleanup provider set to \(providerName, privacy: .public) (status \(status, privacy: .public)).")
-
-                if providerName == "local", let path = env["VOICEDROP_LOCAL_MODEL_PATH"] {
-                    let localStatus = path.withCString {
-                        voicedrop_engine_set_cleanup_local_model_path(engine, $0)
-                    }
-                    voiceDropLog.log(
-                        "Local cleanup model path set to \(path, privacy: .public) (status \(localStatus, privacy: .public)).")
-                } else if providerName == "cloud" {
-                    let baseURL = env["VOICEDROP_CLOUD_BASE_URL"] ?? ""
-                    let apiKey = env["VOICEDROP_CLOUD_API_KEY"] ?? ""
-                    let model = env["VOICEDROP_CLOUD_MODEL"] ?? ""
-                    let cloudStatus = baseURL.withCString { urlPtr in
-                        apiKey.withCString { keyPtr in
-                            model.withCString { modelPtr in
-                                voicedrop_engine_set_cleanup_cloud_config(
-                                    engine, urlPtr, keyPtr, modelPtr)
-                            }
-                        }
-                    }
-                    voiceDropLog.log("Cloud cleanup config set (status \(cloudStatus, privacy: .public)).")
-                }
-            }
-        }
-
-        // Phase 3 manual Cleanup Strength testing aid only. VOICEDROP_CLEANUP_STRENGTH
-        // is "verbatim" (default)/"light"/"formal".
-        if let strengthName = ProcessInfo.processInfo.environment["VOICEDROP_CLEANUP_STRENGTH"] {
-            let strength: Int32?
-            switch strengthName {
-            case "verbatim": strength = Int32(VOICEDROP_STRENGTH_VERBATIM_CLEAN)
-            case "light": strength = Int32(VOICEDROP_STRENGTH_LIGHT_EDIT)
-            case "formal": strength = Int32(VOICEDROP_STRENGTH_FORMAL_REWRITE)
-            default:
-                voiceDropLog.log("Unknown VOICEDROP_CLEANUP_STRENGTH: \(strengthName, privacy: .public)")
-                strength = nil
-            }
-            if let strength {
-                let status = voicedrop_engine_set_cleanup_strength(engine, strength)
-                voiceDropLog.log(
-                    "Cleanup strength set to \(strengthName, privacy: .public) (status \(status, privacy: .public)).")
-            }
-        }
-
-        // Phase 3 manual blocklist verification aid only. Comma-separated
-        // custom words, merged with the built-in default list.
-        if let words = ProcessInfo.processInfo.environment["VOICEDROP_BLOCKLIST"] {
-            let status = words.withCString { voicedrop_engine_set_blocklist(engine, $0) }
-            voiceDropLog.log(
-                "Blocklist words set to \(words, privacy: .public) (status \(status, privacy: .public)).")
-        }
-
         let monitor = HotkeyMonitor(engine: engine, hud: hud)
         hotkeyMonitor = monitor
+
+        // On Auto, clips too short for Whisper to identify the language
+        // reliably are treated as English rather than guessed (ADR-0009).
+        _ = "en".withCString { voicedrop_engine_set_fallback_language(engine, $0) }
+        applyLanguage(to: engine, monitor.language)
 
         let menuBar = MenuBarController()
         menuBar.onToggleEnabled = { [weak monitor] enabled in
@@ -152,11 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 if success {
                     self.hud.hide()
-                    if !monitor.start() {
-                        voiceDropLog.log(
-                            "Grant Accessibility/Input Monitoring permission in System Settings, then relaunch."
-                        )
-                    }
+                    self.armWhenTrusted(monitor: monitor)
                 } else if attempt < maxAttempts {
                     let delay = Double(attempt) * 5
                     voiceDropLog.log(
@@ -173,6 +90,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         )
+    }
+
+    /// Arms the hotkeys, or — if Accessibility isn't allowed yet — says so
+    /// on the HUD and arms them by itself the moment it is, so there's no
+    /// need to relaunch. `monitor.start()` also triggers macOS's own
+    /// "allow Accessibility" prompt, which links to the right settings page.
+    private func armWhenTrusted(monitor: HotkeyMonitor) {
+        if monitor.start() { return }
+
+        voiceDropLog.log("Waiting for Accessibility permission.")
+        hud.show(.error(message: "Allow VoiceDrop in System Settings → Accessibility"))
+        trustWaitTimer?.invalidate()
+        trustWaitTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard AXIsProcessTrusted() else { return }
+            timer.invalidate()
+            self?.trustWaitTimer = nil
+            self?.hud.hide()
+            if !monitor.start() {
+                voiceDropLog.log("Accessibility allowed, but the event tap still failed to start.")
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

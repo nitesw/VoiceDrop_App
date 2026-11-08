@@ -12,9 +12,8 @@ pub enum SessionState {
     /// exists (Phase 6). Defined now so the state space doesn't need
     /// reshaping later.
     Discarded,
-    /// Reached instead of `Done` when the *Raw Transcript* is empty (silence
-    /// or an accidental brief tap) — short-circuits before the Cleanup Pass,
-    /// which shouldn't need to handle empty input.
+    /// Reached instead of `Done` when the transcript is empty (silence or an
+    /// accidental brief tap).
     NoSpeech,
     Error,
 }
@@ -25,11 +24,11 @@ pub enum SessionEvent {
     HotkeyDown,
     /// Push-to-Talk Hotkey released.
     HotkeyUp,
-    /// Pipeline (STT + Cleanup Pass) finished successfully.
+    /// Speech-to-text finished successfully.
     ProcessingSucceeded,
     /// Pipeline failed at any stage.
     ProcessingFailed,
-    /// The *Raw Transcript* came back empty (silence-only audio, or the
+    /// The transcript came back empty (silence-only audio, or the
     /// buffer was too short to bother running STT on at all).
     NoSpeechDetected,
     /// Audio capture itself failed (e.g. input device disconnected) before

@@ -36,8 +36,20 @@ cp "$MACOS_DIR/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$MACOS_DIR/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$MACOS_DIR/Resources/"MenuBarIcon*.png "$APP_DIR/Contents/Resources/"
 
-echo "==> Code-signing (ad-hoc, stable identifier: $BUNDLE_ID)"
-codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$APP_DIR"
+# A fixed certificate keeps the signature's identity stable across rebuilds,
+# so macOS keeps the Accessibility permission (see scripts/setup-signing.sh).
+# Ad-hoc is the fallback: it works, but the permission is lost on every
+# rebuild.
+SIGNING_IDENTITY="VoiceDrop Local Signing"
+if security find-certificate -c "$SIGNING_IDENTITY" >/dev/null 2>&1; then
+    echo "==> Code-signing with \"$SIGNING_IDENTITY\" (identifier: $BUNDLE_ID)"
+    codesign --force --deep --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID" "$APP_DIR"
+else
+    echo "==> Code-signing ad-hoc (identifier: $BUNDLE_ID)"
+    echo "    warning: run ./scripts/setup-signing.sh once, or macOS will forget"
+    echo "    the Accessibility permission after every rebuild."
+    codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$APP_DIR"
+fi
 
 echo "==> Done: $APP_DIR"
-echo "Run with: open \"$APP_DIR\"  (check Console.app for the ping log line)"
+echo "Run with: open \"$APP_DIR\"  (or ./scripts/install.sh to install it to /Applications)"

@@ -10,11 +10,7 @@ crate-type = ["staticlib", "lib"]
 
 [dependencies]
 cpal = "0.15"
-hound = "3.5"
-whisper-rs = "0.16"
-llama-cpp-2 = "0.1"
-llama-cpp-sys-2 = { version = "0.1", features = ["dynamic-link"] }
-encoding_rs = "0.8"
-ureq = { version = "3", features = ["json"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `metal` runs Whisper on the Apple GPU; without it large-v3-turbo is too
+# slow on CPU alone (see ADR-0009).
+whisper-rs = { version = "0.16", features = ["metal"] }
+ureq = "3"

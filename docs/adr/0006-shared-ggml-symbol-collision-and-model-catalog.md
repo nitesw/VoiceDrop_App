@@ -1,5 +1,7 @@
 # 0006 — whisper.cpp/llama.cpp symbol collision, and a curated model catalog
 
+> **Superseded by [ADR-0009](0009-simplify-to-hold-speak-paste.md)** (2026-11-08): VoiceDrop was cut down to push-to-talk speech-to-text only, and llama.cpp (and with it this symbol collision and the multi-model catalog) was removed. Kept for history; the code is at commit `a5db9dc` if this is ever revisited.
+
 **Status: current again.** Briefly superseded by
 [ADR-0007](0007-ollama-backed-local-cleanup.md) (which moved local cleanup
 to an Ollama-backed provider, removing `llama-cpp-2` and this workaround
