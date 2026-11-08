@@ -4,31 +4,48 @@ import CVoiceDropCore
 import Foundation
 import os
 
-/// macOS virtual keycode for the D key (kVK_ANSI_D from Carbon's HIToolbox,
-/// reproduced here to avoid pulling in the Carbon framework for one constant).
-private let kVK_ANSI_D: Int64 = 0x02
+/// macOS virtual keycode for the Space bar (kVK_Space from Carbon's
+/// HIToolbox, reproduced here to avoid pulling in Carbon for one constant).
+private let kVK_Space: Int64 = 0x31
 
-/// Phase 1 push-to-talk trigger: hold Control+Option+D to record, release to
-/// stop.
+/// The modifier keys that make up a hotkey. Everything else in
+/// `CGEvent.flags` (caps lock, numeric pad, non-coalesced, device bits) is
+/// ignored when matching, so only these four are compared exactly.
+private let hotkeyModifiers: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
+
+/// The two global hotkeys (ADR-0009), both on the Space bar:
 ///
-/// F5 was tried first and rejected: the F-row sends a "system-defined" media
-/// key event by default (not a standard keyDown/keyUp with a keycode) unless
-/// "Use F1, F2, etc. as standard function keys" is enabled in System
-/// Settings → Keyboard — which is also why bare F5 triggered Siri/Dictation
-/// instead of reaching this tap at all. A plain letter key sidesteps that
-/// quirk entirely. Revisit the exact combo (and whether to support F-row
-/// keys, which would need detecting/instructing on that system setting) in
-/// Phase 5's rebinding UI.
+/// - **⌥ Space, held**: push-to-talk. Recording starts on press and stops on
+///   release; the transcript is then dropped at the cursor.
+/// - **⌥⇧ Space, tapped**: cycle the dictation language
+///   (English → Ukrainian → French → Auto).
+///
+/// Modifiers are matched exactly, so ⌥⇧ Space never starts a recording and
+/// ⌥ Space never cycles the language. Once a recording has started, every
+/// Space event until the key is released belongs to it, so pressing Shift
+/// halfway through is ignored. ⌃ Space / ⌃⌥ Space (input-source switching)
+/// and ⌘ Space (Spotlight) are left alone.
+///
+/// History: Control+Option+D was the original combo, dropped as too awkward
+/// to hold. F5 was tried before that and rejected: the F-row sends
+/// "system-defined" media-key events (not keyDown/keyUp) unless "Use F1, F2,
+/// etc. as standard function keys" is enabled.
 final class HotkeyMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private let engine: OpaquePointer
     private let hud: DictationHUDController
-    /// True from a matched (Control+Option held) D key-down until its
-    /// corresponding key-up. Lets the key-up handler swallow only the release
-    /// that belongs to our hotkey — a plain, unmodified "D" keystroke (e.g.
-    /// normal typing elsewhere) must never be swallowed.
+    /// True from a matched ⌥ Space key-down until the Space key-up. Lets the
+    /// key-up handler swallow only the release that belongs to our hotkey —
+    /// a plain Space (normal typing) must never be swallowed.
     private var hotkeyIsDown = false
+    /// Same, for the ⌥⇧ Space language-cycle tap: its auto-repeats and its
+    /// release are swallowed too, without cycling again.
+    private var languageKeyIsDown = false
+    /// The language applied to the engine at the start of each recording.
+    /// Changing it mid-transcription never touches the engine directly —
+    /// see `handleKeyDown`.
+    private(set) var language = DictationLanguage.saved
     /// Toggled from the Menu Bar Icon's Enable/Disable item via `setEnabled`.
     /// `handle` also checks this directly as a fast early-exit, but the real
     /// suspend/resume work — actually disabling the tap and freeing loaded
@@ -129,7 +146,9 @@ final class HotkeyMonitor {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        voiceDropLog.log("Control+Option+D hotkey armed. Hold to record, release to stop.")
+        voiceDropLog.log(
+            "Hotkeys armed: hold ⌥Space to dictate (\(self.language.displayName, privacy: .public)), tap ⌥⇧Space to switch language."
+        )
 
         trustPollTimer?.invalidate()
         trustPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -248,22 +267,48 @@ final class HotkeyMonitor {
         guard isEnabled else { return false }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        guard keyCode == kVK_ANSI_D else { return false }
+        guard keyCode == kVK_Space else { return false }
 
         switch type {
         case .keyDown:
-            // Require Control+Option held down at the moment D goes down. If
-            // the modifiers aren't held, this is just a plain "D" keystroke —
-            // don't swallow it, and don't arm hotkeyIsDown.
-            let flags = event.flags
-            guard flags.contains(.maskControl), flags.contains(.maskAlternate) else { return false }
-            hotkeyIsDown = true
-            handleKeyDown()
-            return true
+            if hotkeyIsDown || languageKeyIsDown {
+                // While either hotkey is held, its Space auto-repeats belong
+                // to it: swallow them without acting again. This is also what
+                // makes Shift pressed mid-recording harmless.
+                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+                    return true
+                }
+                // A fresh (non-repeat) press while we think the key is still
+                // down means its release never reached us (e.g. Secure Input
+                // hid it, or the tap was briefly disabled). Recover instead
+                // of swallowing every Space from now on: finish the stale
+                // press as if released, then handle this one normally.
+                languageKeyIsDown = false
+                if hotkeyIsDown {
+                    hotkeyIsDown = false
+                    handleKeyUp()
+                }
+            }
+
+            let modifiers = event.flags.intersection(hotkeyModifiers)
+            if modifiers == .maskAlternate {
+                hotkeyIsDown = true
+                handleKeyDown()
+                return true
+            }
+            if modifiers == [.maskAlternate, .maskShift] {
+                languageKeyIsDown = true
+                cycleLanguage()
+                return true
+            }
+            // Plain Space, or a combo that isn't ours — pass it through.
+            return false
         case .keyUp:
-            // Only swallow the release if it matches a key-down we actually
-            // armed — a plain "D" release (no modifiers held at press time)
-            // must pass through untouched.
+            // Only swallow a release that belongs to a key-down we armed.
+            if languageKeyIsDown {
+                languageKeyIsDown = false
+                return true
+            }
             guard hotkeyIsDown else { return false }
             hotkeyIsDown = false
             handleKeyUp()
@@ -273,10 +318,28 @@ final class HotkeyMonitor {
         }
     }
 
+    /// ⌥⇧ Space: switch to the next language, remember it, and flash it on
+    /// the HUD. Only Swift state changes here; the engine picks it up at the
+    /// next recording start, so a transcription already running is never
+    /// affected.
+    private func cycleLanguage() {
+        language = language.next
+        language.save()
+        voiceDropLog.log("Dictation language: \(self.language.displayName, privacy: .public).")
+        if voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE {
+            hud.show(.language(name: language.displayName), autoDismissAfter: 1.0)
+        }
+    }
+
     private func handleKeyDown() {
         // Guard against key-repeat re-triggering while already recording —
         // only attempt the transition from Idle.
         guard voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE else { return }
+
+        // Apply the current language now, while the engine is Idle: nothing
+        // else is reading its config at this point (a previous session's
+        // transcription has finished and been reset).
+        _ = applyLanguage(to: engine, language)
 
         // Capture the Injection Target now — fixed for the session even if
         // focus later changes (see TextInjector's doc).
@@ -375,4 +438,13 @@ final class HotkeyMonitor {
             }
         }
     }
+}
+
+/// Sets `language` on the engine. Also used once at launch (main.swift).
+@discardableResult
+func applyLanguage(to engine: OpaquePointer, _ language: DictationLanguage) -> Int32 {
+    guard let code = language.whisperCode else {
+        return voicedrop_engine_set_language(engine, nil)
+    }
+    return code.withCString { voicedrop_engine_set_language(engine, $0) }
 }

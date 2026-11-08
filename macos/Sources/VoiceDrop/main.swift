@@ -40,6 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let monitor = HotkeyMonitor(engine: engine, hud: hud)
         hotkeyMonitor = monitor
 
+        // On Auto, clips too short for Whisper to identify the language
+        // reliably are treated as English rather than guessed (ADR-0009).
+        _ = "en".withCString { voicedrop_engine_set_fallback_language(engine, $0) }
+        applyLanguage(to: engine, monitor.language)
+
         let menuBar = MenuBarController()
         menuBar.onToggleEnabled = { [weak monitor] enabled in
             monitor?.setEnabled(enabled)

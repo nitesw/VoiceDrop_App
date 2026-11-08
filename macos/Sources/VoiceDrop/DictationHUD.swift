@@ -19,6 +19,8 @@ enum HUDState: Equatable {
     /// copied anywhere — see `TextInjector.InjectionOutcome.discarded`.
     case discarded
     case error(message: String)
+    /// Brief confirmation after ⌥⇧Space switches the dictation language.
+    case language(name: String)
 }
 
 private struct HUDContentView: View {
@@ -54,6 +56,8 @@ private struct HUDContentView: View {
             case .error(let message):
                 Text(message)
                     .foregroundStyle(.secondary)
+            case .language(let name):
+                Text(name)
             }
         }
         .padding(.horizontal, 18)
