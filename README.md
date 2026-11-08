@@ -12,7 +12,7 @@ is this small and what was deliberately left out, and
 
 | Do | Hotkey |
 | :--- | :--- |
-| Dictate | Hold **⌥ Space**, speak, release |
+| Dictate | Hold **⌥ Space**, speak, release (or tap to start, tap again to stop: see below) |
 | Switch language | Tap **⌥ ⇧ Space**: English → Ukrainian → French → Auto-detect |
 
 - The language you pick is remembered. On Auto, very short clips are treated
@@ -21,8 +21,12 @@ is this small and what was deliberately left out, and
   supports it, otherwise auto-pasted. If neither works, it's copied to the
   clipboard and the HUD says "Copied to clipboard". Password fields are
   detected and the text is discarded, never pasted or copied.
+- **Tap ⌥Space to Start/Stop** (menu bar): if you'd rather not hold the
+  keys, turn this on. One tap starts listening, the next tap stops and drops
+  the text.
 - The menu bar icon has **Enabled** (turns the hotkeys off and frees the
-  model's memory), **Launch at Login** and **Quit**.
+  model's memory), **Tap ⌥Space to Start/Stop**, **Launch at Login** and
+  **Quit**.
 
 ## Installing (macOS 13+, built and tested on Apple Silicon)
 

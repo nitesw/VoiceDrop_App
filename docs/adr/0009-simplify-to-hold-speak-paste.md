@@ -43,6 +43,11 @@ keyboard input source, and ⌘ Space is Spotlight.
 Everything is driven by hotkeys. The menu bar only keeps Enabled, Launch at Login
 and Quit.
 
+**Amendment (2026-11-08, after first daily use):** holding ⌥ Space through a
+long thought is tiring, so the menu bar gained one more toggle, "Tap ⌥Space
+to Start/Stop": one tap starts listening, the next tap stops. Hold stays the
+default. Still a single menu item, not a settings window.
+
 ### What stays (already built, kept as-is)
 
 - Push-to-talk hotkey via `CGEventTap`, including the tap-disable recovery when
