@@ -10,5 +10,7 @@ crate-type = ["staticlib", "lib"]
 
 [dependencies]
 cpal = "0.15"
-whisper-rs = "0.16"
+# `metal` runs Whisper on the Apple GPU; without it large-v3-turbo is too
+# slow on CPU alone (see ADR-0009).
+whisper-rs = { version = "0.16", features = ["metal"] }
 ureq = "3"

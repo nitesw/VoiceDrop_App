@@ -15,9 +15,11 @@ pub struct WhisperModel {
     pub filename: &'static str,
 }
 
+/// Whisper large-v3-turbo, 5-bit quantized (~574 MB): far more accurate
+/// than `small` at a similar download size, and fast on the GPU (ADR-0009).
 pub const WHISPER_MODEL: WhisperModel = WhisperModel {
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-    filename: "ggml-small.bin",
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+    filename: "ggml-large-v3-turbo-q5_0.bin",
 };
 
 #[derive(Debug)]

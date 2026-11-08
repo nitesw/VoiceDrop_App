@@ -125,7 +125,11 @@ impl Transcriber {
         if !model_path.is_file() {
             return Err(TranscribeError::ModelNotFound(model_path.to_path_buf()));
         }
-        let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+        // GPU (Metal) is on by default when built with the `metal` feature;
+        // flash attention is a further speedup on it.
+        let mut ctx_params = WhisperContextParameters::default();
+        ctx_params.flash_attn(true);
+        let ctx = WhisperContext::new_with_params(model_path, ctx_params)
             .map_err(|e| TranscribeError::ModelLoadFailed(e.to_string()))?;
         Ok(Transcriber { ctx })
     }
@@ -146,7 +150,15 @@ impl Transcriber {
             .create_state()
             .map_err(|e| TranscribeError::TranscriptionFailed(e.to_string()))?;
 
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        // Beam search keeps several candidate transcriptions and picks the
+        // most likely one, instead of committing to the first guess for
+        // every token. More accurate, and cheap enough on the GPU.
+        let mut params = FullParams::new(SamplingStrategy::BeamSearch {
+            beam_size: 5,
+            patience: -1.0,
+        });
+        // Don't emit non-speech tokens like "[music]" or "(laughs)".
+        params.set_suppress_nst(true);
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
