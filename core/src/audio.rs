@@ -209,34 +209,6 @@ fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
     out
 }
 
-/// Writes 16-bit PCM mono WAV for human-listening verification (see the
-/// Phase 1 "Done when" — a log line proves nothing, listening to the file
-/// does). Not the format handed to whisper.cpp; this is purely a debug aid.
-pub fn write_verification_wav(
-    samples: &[f32],
-    sample_rate: u32,
-    path: &std::path::Path,
-) -> std::io::Result<()> {
-    let spec = hound::WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut writer =
-        hound::WavWriter::create(path, spec).map_err(|e| std::io::Error::other(e.to_string()))?;
-    for &s in samples {
-        let clamped = s.clamp(-1.0, 1.0);
-        writer
-            .write_sample((clamped * i16::MAX as f32) as i16)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-    }
-    writer
-        .finalize()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,20 +238,5 @@ mod tests {
         let samples = vec![0.0; 4800];
         let out = resample_linear(&samples, 48_000, 16_000);
         assert_eq!(out.len(), 1600);
-    }
-
-    #[test]
-    fn write_verification_wav_roundtrips_sample_count() {
-        let dir = std::env::temp_dir();
-        let path = dir.join("voicedrop_test_verification.wav");
-        let samples = vec![0.0_f32, 0.5, -0.5, 1.0, -1.0];
-        write_verification_wav(&samples, WHISPER_SAMPLE_RATE, &path).unwrap();
-
-        let mut reader = hound::WavReader::open(&path).unwrap();
-        assert_eq!(reader.spec().sample_rate, WHISPER_SAMPLE_RATE);
-        assert_eq!(reader.spec().channels, 1);
-        assert_eq!(reader.len() as usize, samples.len());
-        let _ = reader.samples::<i16>().count();
-        std::fs::remove_file(&path).ok();
     }
 }

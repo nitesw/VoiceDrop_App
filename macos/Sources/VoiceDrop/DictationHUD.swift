@@ -21,14 +21,6 @@ enum HUDState: Equatable {
     case error(message: String)
 }
 
-/// Where the Dictation HUD appears on screen. Only `.bottomCenter` is
-/// implemented — the actual position picker is Phase 5's "HUD position"
-/// todo — but callers already pass this enum so wiring the picker later
-/// doesn't require a HUD redesign, just new cases here.
-enum HUDPosition {
-    case bottomCenter
-}
-
 private struct HUDContentView: View {
     let state: HUDState
 
@@ -119,7 +111,7 @@ final class DictationHUDController {
     private var hostingView: NSHostingView<HUDContentView>?
     private var dismissTimer: Timer?
 
-    func show(_ state: HUDState, position: HUDPosition = .bottomCenter, autoDismissAfter: TimeInterval? = nil) {
+    func show(_ state: HUDState, autoDismissAfter: TimeInterval? = nil) {
         dismissTimer?.invalidate()
         dismissTimer = nil
 
@@ -138,7 +130,7 @@ final class DictationHUDController {
         }
         hostingView?.layoutSubtreeIfNeeded()
         let fitting = hostingView?.fittingSize ?? NSSize(width: 200, height: 44)
-        positionPanel(panel, size: fitting, position: position)
+        positionPanel(panel, size: fitting)
         panel.orderFrontRegardless()
 
         if let autoDismissAfter {
@@ -174,14 +166,13 @@ final class DictationHUDController {
         return panel
     }
 
-    private func positionPanel(_ panel: NSPanel, size: NSSize, position: HUDPosition) {
+    /// Always bottom-center of the main screen (ADR-0009: no position
+    /// picker).
+    private func positionPanel(_ panel: NSPanel, size: NSSize) {
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
-        switch position {
-        case .bottomCenter:
-            let x = screenFrame.midX - size.width / 2
-            let y = screenFrame.minY + 60
-            panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
-        }
+        let x = screenFrame.midX - size.width / 2
+        let y = screenFrame.minY + 60
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 }

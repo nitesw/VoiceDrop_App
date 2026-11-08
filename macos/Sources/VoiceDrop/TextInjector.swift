@@ -33,7 +33,7 @@ enum InjectionOutcome {
     case discarded(reason: String)
 }
 
-/// Inserts the *Cleaned Transcript* into the Injection Target, in order:
+/// Inserts the transcript into the Injection Target, in order:
 ///
 /// 1. **Direct AX insertion** (setting `kAXSelectedTextAttribute`) —
 ///    preferred because it never touches the system clipboard and
@@ -54,7 +54,7 @@ enum InjectionOutcome {
 enum TextInjector {
     /// Call at `Idle -> Recording` — captures what currently has focus so
     /// injection still targets the right place even if the user's focus
-    /// drifts during the seconds STT/Cleanup Pass take to run.
+    /// drifts during the seconds speech-to-text takes to run.
     static func captureCurrentTarget() -> InjectionTarget {
         let systemWide = AXUIElementCreateSystemWide()
         var focused: AnyObject?

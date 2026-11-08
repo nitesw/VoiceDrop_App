@@ -1,8 +1,8 @@
 import AppKit
 
 /// The persistent Menu Bar Icon (`NSStatusItem`). Single click opens a
-/// dropdown: Enable/Disable toggle, "Settings…" (disabled — Phase 5 hasn't
-/// built the Settings Window yet), and Quit. Enabled/disabled state is
+/// dropdown: Enable/Disable toggle and Quit. There is no Settings window by
+/// design (ADR-0009) — everything else is hotkey-driven. Enabled/disabled state is
 /// reflected via the button's opacity (`appearsDisabled`), never by
 /// introducing color, per VISUAL_STYLE.md.
 final class MenuBarController: NSObject {
@@ -45,11 +45,6 @@ final class MenuBarController: NSObject {
         enabledMenuItem.action = #selector(toggleEnabled)
         menu.addItem(enabledMenuItem)
 
-        menu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(title: "Settings…", action: nil, keyEquivalent: "")
-        settingsItem.isEnabled = false  // Phase 5 — Settings Window doesn't exist yet.
-        menu.addItem(settingsItem)
 
         menu.addItem(.separator())
 

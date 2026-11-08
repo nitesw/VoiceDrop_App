@@ -1,7 +1,7 @@
 //! Speech-to-text via whisper.cpp (`whisper-rs`). Turns the mono 16 kHz
-//! buffer `audio::AudioCapture::stop` produces into a *Raw Transcript*
-//! string. No filler-word removal, punctuation, or grammar correction here
-//! — that's the *Cleanup Pass* in Phase 3.
+//! buffer `audio::AudioCapture::stop` produces into the transcript that gets
+//! dropped at the cursor. There is no separate cleanup step (see ADR-0009):
+//! Whisper's own punctuation is what the user gets.
 
 use std::path::{Path, PathBuf};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -39,9 +39,6 @@ pub struct TranscribeConfig {
     pub language: LanguageSetting,
     /// Used instead of auto-detect when the clip is under `AUTO_DETECT_MIN_MS`.
     pub fallback_language: Option<String>,
-    /// *Custom Vocabulary* bias list — fed to whisper.cpp as an initial
-    /// prompt. Populated by Phase 5's editable list; empty for now.
-    pub vocabulary: Vec<String>,
 }
 
 /// Duration of a mono buffer sampled at `WHISPER_SAMPLE_RATE`, in ms.
@@ -69,22 +66,11 @@ fn resolve_language<'a>(config: &'a TranscribeConfig, samples: &[f32]) -> Option
     }
 }
 
-/// Joins the *Custom Vocabulary* bias list into whisper.cpp's initial-prompt
-/// mechanism. `None` if there's nothing to bias — the plumbing Phase 5 will
-/// populate, unused until then.
-fn build_initial_prompt(vocabulary: &[String]) -> Option<String> {
-    if vocabulary.is_empty() {
-        None
-    } else {
-        Some(vocabulary.join(", "))
-    }
-}
-
 /// Known literal placeholder tokens whisper.cpp emits *as transcribed text*
 /// for silent/non-speech audio, instead of just returning nothing — e.g.
 /// `[BLANK_AUDIO]` observed in practice. Without filtering these, they slip
-/// past the empty-string check as if they were real speech and get handed
-/// to the Cleanup Pass / injected verbatim, which is never correct output.
+/// past the empty-string check as if they were real speech and get injected
+/// verbatim, which is never correct output.
 const BLANK_AUDIO_MARKERS: &[&str] = &[
     "[blank_audio]",
     "[silence]",
@@ -145,8 +131,8 @@ impl Transcriber {
     }
 
     /// Runs Whisper over `samples` (mono, `WHISPER_SAMPLE_RATE`, already
-    /// validated by `is_too_short` at the caller) and returns the *Raw
-    /// Transcript* text. An empty/whitespace-only result means near-silent
+    /// validated by `is_too_short` at the caller) and returns the
+    /// transcript text. An empty/whitespace-only result means near-silent
     /// audio that produced no intelligible speech — callers should treat
     /// that the same as "too short", per the "Silence / no-speech handling"
     /// todo.
@@ -168,9 +154,6 @@ impl Transcriber {
 
         if let Some(lang) = resolve_language(config, samples) {
             params.set_language(Some(lang));
-        }
-        if let Some(prompt) = build_initial_prompt(&config.vocabulary) {
-            params.set_initial_prompt(&prompt);
         }
 
         state
@@ -268,7 +251,6 @@ mod tests {
         let config = TranscribeConfig {
             language: LanguageSetting::Fixed("fr".to_string()),
             fallback_language: Some("en".to_string()),
-            vocabulary: vec![],
         };
         assert_eq!(
             resolve_language(&config, &samples_of_duration_ms(5_000)),
@@ -281,7 +263,6 @@ mod tests {
         let config = TranscribeConfig {
             language: LanguageSetting::Auto,
             fallback_language: Some("en".to_string()),
-            vocabulary: vec![],
         };
         assert_eq!(
             resolve_language(&config, &samples_of_duration_ms(500)),
@@ -294,24 +275,10 @@ mod tests {
         let config = TranscribeConfig {
             language: LanguageSetting::Auto,
             fallback_language: Some("en".to_string()),
-            vocabulary: vec![],
         };
         assert_eq!(
             resolve_language(&config, &samples_of_duration_ms(5_000)),
             None
-        );
-    }
-
-    #[test]
-    fn empty_vocabulary_produces_no_prompt() {
-        assert_eq!(build_initial_prompt(&[]), None);
-    }
-
-    #[test]
-    fn vocabulary_joins_into_prompt() {
-        assert_eq!(
-            build_initial_prompt(&["VoiceDrop".to_string(), "whisper.cpp".to_string()]),
-            Some("VoiceDrop, whisper.cpp".to_string())
         );
     }
 

@@ -55,7 +55,7 @@ final class HotkeyMonitor {
     /// round of which freezes system-wide keystroke delivery for a bit).
     private var trustPollTimer: Timer?
     /// What had focus when the current session started — captured at
-    /// key-down, used at key-up once the Cleaned Transcript is ready. Kept
+    /// key-down, used at key-up once the transcript is ready. Kept
     /// as a property (rather than threaded through the async chain) since
     /// there's only ever one session in flight at a time.
     private var injectionTarget: InjectionTarget?
@@ -200,8 +200,8 @@ final class HotkeyMonitor {
     /// Real suspend/resume for the Menu Bar Icon's Enable/Disable toggle —
     /// not just gating `handle()`. Disabling actually stops the `CGEventTap`
     /// from intercepting any events (rather than leaving it running and
-    /// just ignoring what it sees), and drops any cached Whisper/Cleanup
-    /// Pass models so they stop occupying memory while the app sits idle.
+    /// just ignoring what it sees), and drops the cached Whisper model so
+    /// it stops occupying memory while the app sits idle.
     ///
     /// If a session is already in flight (Recording/Processing) when
     /// disabled, its models stay loaded until that session finishes — the
@@ -344,30 +344,14 @@ final class HotkeyMonitor {
                 return
             }
 
-            let wavPath = NSTemporaryDirectory() + "voicedrop_verification.wav"
-            let wavStatus = wavPath.withCString { voicedrop_engine_write_verification_wav(engine, $0) }
-            if wavStatus == VOICEDROP_OK {
-                voiceDropLog.log(
-                    "Recording complete. Verification WAV written to: \(wavPath, privacy: .public)")
-            } else {
-                voiceDropLog.log(
-                    "Recording complete, but WAV write failed (status \(wavStatus, privacy: .public)).")
-            }
-
-            if let cString = voicedrop_engine_last_raw_transcript(engine) {
-                defer { voicedrop_core_free_string(cString) }
-                voiceDropLog.log("Raw Transcript: \(String(cString: cString), privacy: .public)")
-            }
-
-            guard let cleanedCString = voicedrop_engine_last_transcript(engine) else {
-                voiceDropLog.log("No cleaned transcript available.")
+            guard let transcriptCString = voicedrop_engine_last_transcript(engine) else {
+                voiceDropLog.log("No transcript available.")
                 _ = voicedrop_engine_reset(engine)
                 DispatchQueue.main.async { hud.hide() }
                 return
             }
-            let transcript = String(cString: cleanedCString)
-            voicedrop_core_free_string(cleanedCString)
-            voiceDropLog.log("Cleaned Transcript: \(transcript, privacy: .public)")
+            let transcript = String(cString: transcriptCString)
+            voicedrop_core_free_string(transcriptCString)
 
             _ = voicedrop_engine_reset(engine)
 
