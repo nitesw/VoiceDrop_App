@@ -110,14 +110,46 @@ private struct WaveformTraceView: View {
 /// main, and ignores mouse events entirely — per "HUD never steals focus
 /// from the Injection Target app," it must not be clickable at all, since
 /// even an accidental click could shift focus away from the target.
+///
+/// The panel is not kept for the app's lifetime: `hide()` throws it away
+/// and the next `show` builds a fresh one. A long-lived panel broke after
+/// the display slept: macOS rebuilt its Spaces on wake and left the panel
+/// in none of them, so `orderFrontRegardless` silently did nothing and the
+/// HUD never appeared again until relaunch. A new window always lands in
+/// the current Space. Waking and display changes also drop the panel
+/// (rebuilding it at once if it's on screen), for a HUD that stays up
+/// across a sleep, such as the "Allow Accessibility" prompt.
 final class DictationHUDController {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<HUDContentView>?
     private var dismissTimer: Timer?
+    /// What's on screen now (`.hidden` when nothing is), so a panel dropped
+    /// while visible can be rebuilt showing the same thing.
+    private var currentState: HUDState = .hidden
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+
+    init() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for (center, name) in [
+            (workspace, NSWorkspace.screensDidWakeNotification),
+            (workspace, NSWorkspace.didWakeNotification),
+            (NotificationCenter.default, NSApplication.didChangeScreenParametersNotification),
+        ] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.rebuildPanel()
+            }
+            observers.append((center, token))
+        }
+    }
+
+    deinit {
+        for (center, token) in observers { center.removeObserver(token) }
+    }
 
     func show(_ state: HUDState, autoDismissAfter: TimeInterval? = nil) {
         dismissTimer?.invalidate()
         dismissTimer = nil
+        currentState = state
 
         let panel = ensurePanel()
         // Update the existing hosting view's rootView rather than
@@ -147,7 +179,29 @@ final class DictationHUDController {
     func hide() {
         dismissTimer?.invalidate()
         dismissTimer = nil
+        currentState = .hidden
+        discardPanel()
+    }
+
+    /// Replaces the on-screen panel after a wake or display change, with
+    /// the same content and any pending auto-dismiss kept. A hidden HUD has
+    /// no panel (see `hide`), so there's nothing to do then.
+    private func rebuildPanel() {
+        guard panel != nil, currentState != .hidden else { return }
+        discardPanel()
+        voiceDropLog.log("Display woke or changed — rebuilt the HUD window.")
+        let pendingDismiss = dismissTimer
+        let state = currentState
+        dismissTimer = nil
+        show(state)
+        dismissTimer = pendingDismiss
+    }
+
+    private func discardPanel() {
         panel?.orderOut(nil)
+        panel?.close()
+        panel = nil
+        hostingView = nil
     }
 
     private func ensurePanel() -> NSPanel {
@@ -158,6 +212,8 @@ final class DictationHUDController {
             backing: .buffered,
             defer: false
         )
+        // Only `self.panel` owns it, so `close()` must not also release it.
+        panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]

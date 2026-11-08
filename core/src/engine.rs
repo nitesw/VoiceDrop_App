@@ -1,6 +1,7 @@
 //! C ABI surface for the Swift shell. Wraps `Session` + `AudioCapture` behind
 //! an opaque handle. Intended to be driven from a single thread (the Swift
-//! main thread reacting to CGEventTap callbacks) — no internal locking is
+//! side's serial `engineQueue`, kept off the CGEventTap callback because
+//! opening the mic can take seconds) — no internal locking is
 //! provided beyond what `AudioCapture`'s realtime callback already needs.
 
 use crate::audio::{AudioCapture, AudioError};
