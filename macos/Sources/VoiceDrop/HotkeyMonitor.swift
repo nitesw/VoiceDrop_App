@@ -13,10 +13,30 @@ private let kVK_Space: Int64 = 0x31
 /// ignored when matching, so only these four are compared exactly.
 private let hotkeyModifiers: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
 
+/// How ⌥ Space controls recording. Chosen from the menu bar, remembered.
+enum RecordingMode: String {
+    /// Hold ⌥ Space while speaking; releasing it stops (push-to-talk).
+    case hold
+    /// Tap ⌥ Space to start, tap it again to stop. Hands-free in between.
+    case toggle
+
+    private static let defaultsKey = "recordingMode"
+
+    static var saved: RecordingMode {
+        UserDefaults.standard.string(forKey: defaultsKey).flatMap(RecordingMode.init) ?? .hold
+    }
+
+    func save() {
+        UserDefaults.standard.set(rawValue, forKey: Self.defaultsKey)
+    }
+}
+
 /// The two global hotkeys (ADR-0009), both on the Space bar:
 ///
-/// - **⌥ Space, held**: push-to-talk. Recording starts on press and stops on
-///   release; the transcript is then dropped at the cursor.
+/// - **⌥ Space**: dictate. In `.hold` mode (default), recording runs while
+///   it's held and stops on release. In `.toggle` mode, one tap starts and
+///   the next tap stops. Either way the transcript is then dropped at the
+///   cursor.
 /// - **⌥⇧ Space, tapped**: cycle the dictation language
 ///   (English → Ukrainian → French → Auto).
 ///
@@ -46,6 +66,11 @@ final class HotkeyMonitor {
     /// Changing it mid-transcription never touches the engine directly —
     /// see `handleKeyDown`.
     private(set) var language = DictationLanguage.saved
+    /// Hold vs. tap-to-toggle, set from the menu bar. Only read on a
+    /// key event, so changing it between recordings needs nothing else.
+    var recordingMode = RecordingMode.saved {
+        didSet { recordingMode.save() }
+    }
     /// Toggled from the Menu Bar Icon's Enable/Disable item via `setEnabled`.
     /// `handle` also checks this directly as a fast early-exit, but the real
     /// suspend/resume work — actually disabling the tap and freeing loaded
@@ -235,6 +260,11 @@ final class HotkeyMonitor {
         CGEvent.tapEnable(tap: tap, enable: enabled)
 
         guard !enabled else { return }
+        // With the tap off, nothing could ever stop a recording that's
+        // running (e.g. a toggle-mode one), so finish it now as if stopped.
+        hotkeyIsDown = false
+        languageKeyIsDown = false
+        handleKeyUp()
         if voicedrop_engine_state(engine) == VOICEDROP_STATE_IDLE {
             voicedrop_engine_unload_models(engine)
             voiceDropLog.log("Disabled — event tap stopped and cached models unloaded.")
@@ -286,14 +316,22 @@ final class HotkeyMonitor {
                 languageKeyIsDown = false
                 if hotkeyIsDown {
                     hotkeyIsDown = false
-                    handleKeyUp()
+                    // In hold mode the lost release would have stopped the
+                    // recording; in toggle mode releases do nothing.
+                    if recordingMode == .hold { handleKeyUp() }
                 }
             }
 
             let modifiers = event.flags.intersection(hotkeyModifiers)
             if modifiers == .maskAlternate {
                 hotkeyIsDown = true
-                handleKeyDown()
+                if recordingMode == .toggle,
+                    voicedrop_engine_state(engine) == VOICEDROP_STATE_RECORDING
+                {
+                    handleKeyUp()  // second tap: stop and transcribe
+                } else {
+                    handleKeyDown()
+                }
                 return true
             }
             if modifiers == [.maskAlternate, .maskShift] {
@@ -311,7 +349,9 @@ final class HotkeyMonitor {
             }
             guard hotkeyIsDown else { return false }
             hotkeyIsDown = false
-            handleKeyUp()
+            // Releasing stops the recording only in hold mode; in toggle
+            // mode the next tap does.
+            if recordingMode == .hold { handleKeyUp() }
             return true
         default:
             return false

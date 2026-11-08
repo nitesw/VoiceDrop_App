@@ -2,7 +2,8 @@ import AppKit
 import ServiceManagement
 
 /// The persistent Menu Bar Icon (`NSStatusItem`). Single click opens a
-/// dropdown: Enable/Disable toggle, Launch at Login, and Quit. There is no Settings window by
+/// dropdown: Enable/Disable toggle, tap-to-toggle recording, Launch at
+/// Login, and Quit. There is no Settings window by
 /// design (ADR-0009) — everything else is hotkey-driven. Enabled/disabled state is
 /// reflected via the button's opacity (`appearsDisabled`), never by
 /// introducing color, per VISUAL_STYLE.md.
@@ -10,6 +11,17 @@ final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let enabledMenuItem = NSMenuItem()
     private let launchAtLoginItem = NSMenuItem()
+    private let tapToToggleItem = NSMenuItem()
+
+    /// Called when the user switches between holding ⌥Space and tapping it
+    /// to start/stop. main.swift forwards it to `HotkeyMonitor`.
+    var onToggleTapMode: ((Bool) -> Void)?
+
+    /// Whether ⌥Space taps start/stop recording instead of being held.
+    /// Set by main.swift at launch from the saved mode.
+    var isTapToToggle = false {
+        didSet { updateAppearance() }
+    }
 
     /// Called whenever the user toggles Enabled/Disabled from the dropdown.
     /// The caller (main.swift) is responsible for actually suspending the
@@ -47,6 +59,11 @@ final class MenuBarController: NSObject {
         enabledMenuItem.action = #selector(toggleEnabled)
         menu.addItem(enabledMenuItem)
 
+        tapToToggleItem.title = "Tap ⌥Space to Start/Stop"
+        tapToToggleItem.target = self
+        tapToToggleItem.action = #selector(toggleTapMode)
+        menu.addItem(tapToToggleItem)
+
         launchAtLoginItem.title = "Launch at Login"
         launchAtLoginItem.target = self
         launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
@@ -65,6 +82,11 @@ final class MenuBarController: NSObject {
         isEnabled.toggle()
         updateAppearance()
         onToggleEnabled?(isEnabled)
+    }
+
+    @objc private func toggleTapMode() {
+        isTapToToggle.toggle()
+        onToggleTapMode?(isTapToToggle)
     }
 
     /// Registers/unregisters the app itself as a login item via
@@ -95,6 +117,7 @@ final class MenuBarController: NSObject {
 
     private func updateAppearance() {
         enabledMenuItem.state = isEnabled ? .on : .off
+        tapToToggleItem.state = isTapToToggle ? .on : .off
         launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         statusItem.button?.appearsDisabled = !isEnabled
     }

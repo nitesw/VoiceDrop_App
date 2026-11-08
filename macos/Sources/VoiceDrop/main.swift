@@ -51,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.setEnabled(enabled)
             voiceDropLog.log("Hotkey \(enabled ? "enabled" : "disabled", privacy: .public) via Menu Bar Icon.")
         }
+        menuBar.isTapToToggle = monitor.recordingMode == .toggle
+        menuBar.onToggleTapMode = { [weak monitor] tapToToggle in
+            monitor?.recordingMode = tapToToggle ? .toggle : .hold
+            voiceDropLog.log("Recording mode: \(tapToToggle ? "tap to start/stop" : "hold", privacy: .public).")
+        }
         self.menuBar = menuBar
 
         provisionModelThenArm(monitor: monitor)

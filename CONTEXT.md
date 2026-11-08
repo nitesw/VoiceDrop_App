@@ -6,7 +6,10 @@
 The full unit of interaction: from the user pressing the Push-to-Talk Hotkey, through speaking, releasing the key and transcription, ending when a Transcript is produced and delivered (or the session finds no speech, or errors out).
 
 **Push-to-Talk Hotkey**
-⌥ Space, held. Global and system-wide: works regardless of which app is focused. Recording runs while it's held; releasing it stops recording and starts transcription. Hardcoded, not rebindable (ADR-0009).
+⌥ Space. Global and system-wide: works regardless of which app is focused. By default it's held: recording runs while it's held, and releasing it stops recording and starts transcription. With the **Recording Mode** set to tap-to-toggle, one tap starts and the next tap stops. Hardcoded, not rebindable (ADR-0009).
+
+**Recording Mode**
+Hold (default) or tap-to-toggle, chosen from the Menu Bar Icon and remembered. Only changes how the Push-to-Talk Hotkey starts and stops a recording.
 
 **Language Hotkey**
 ⌥ ⇧ Space, tapped. Cycles the Dictation Language. Matched with exact modifiers, so it never starts a recording, and pressing Shift during a recording is ignored.
@@ -24,7 +27,7 @@ The focused text field/app the Transcript is inserted into, at the cursor positi
 A small floating pill-shaped overlay at the bottom center of the screen. Shows a live waveform while recording, a processing indicator while transcribing, and brief notices (no speech detected, copied to clipboard, secure field, language switched, errors). Never takes focus or intercepts clicks. Visual treatment follows [docs/design/VISUAL_STYLE.md](docs/design/VISUAL_STYLE.md).
 
 **Menu Bar Icon**
-The persistent menu bar presence. A click opens a dropdown with Enabled (a real kill switch: stops the hotkeys and unloads the model), Launch at Login, and Quit. It is not a recording trigger.
+The persistent menu bar presence. A click opens a dropdown with Enabled (a real kill switch: stops the hotkeys and unloads the model; a recording in progress is finished first), Tap ⌥Space to Start/Stop (the Recording Mode), Launch at Login, and Quit. It is not a recording trigger.
 
 **Launch at Login**
 A menu toggle that starts VoiceDrop automatically at login, so the hotkeys are always available.
