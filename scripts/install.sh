@@ -12,8 +12,9 @@ INSTALLED="/Applications/VoiceDrop.app"
 
 echo "==> Installing to $INSTALLED"
 # Quit the running copy first so the new one can take over the hotkeys.
-osascript -e 'quit app "VoiceDrop"' >/dev/null 2>&1 || true
-sleep 1
+# (pkill rather than AppleScript's `quit app`, which launches the app first
+# if it isn't running.)
+pkill -x VoiceDrop 2>/dev/null && sleep 1 || true
 rm -rf "$INSTALLED"
 ditto "$BUILT" "$INSTALLED"
 
