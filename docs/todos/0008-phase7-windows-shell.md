@@ -1,5 +1,7 @@
 # Phase 7 — Windows Shell Development
 
+> **Deferred by [ADR-0009](../adr/0009-simplify-to-hold-speak-paste.md)** (2026-11-08): not being built. VoiceDrop was simplified to hold ⌥Space, speak, paste. This doc stays as the detailed thinking if any item here comes back; see the ADR's "Deferred" table.
+
 Tracks [GitHub issue #8](https://github.com/nitesw/VoiceDrop_App/issues/8). Depends on the macOS app being feature-complete through [0007-phase6-robustness.md](0007-phase6-robustness.md) — this phase should be primarily UI-shell + OS-integration work against an already-proven Rust core (see [ADR-0001](../adr/0001-rust-core-with-native-ui-shells.md)). Terms in *italics* refer to [CONTEXT.md](../../CONTEXT.md).
 
 Scope: bring the full macOS feature set to Windows, reusing `voicedrop-core` unchanged wherever possible.

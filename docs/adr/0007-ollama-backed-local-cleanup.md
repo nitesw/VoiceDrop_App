@@ -1,5 +1,7 @@
 # 0007 — Local Cleanup Pass runs through Ollama, not an in-process model
 
+> **Superseded by [ADR-0009](0009-simplify-to-hold-speak-paste.md)** (2026-11-08): VoiceDrop was cut down to push-to-talk speech-to-text only, and the Cleanup Pass was removed. Kept for history; the code is at commit `a5db9dc` if this is ever revisited.
+
 **Superseded by [ADR-0008](0008-local-cleanup-in-process-again.md)**: after
 product direction that "Local" should mean zero extra installs (like
 Whisper), the local Cleanup Pass moved back to a self-contained in-process

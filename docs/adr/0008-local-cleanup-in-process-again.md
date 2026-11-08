@@ -1,5 +1,7 @@
 # 0008 — Local Cleanup Pass is a self-contained in-process model again
 
+> **Superseded by [ADR-0009](0009-simplify-to-hold-speak-paste.md)** (2026-11-08): VoiceDrop was cut down to push-to-talk speech-to-text only, and the Cleanup Pass was removed. Kept for history; the code is at commit `a5db9dc` if this is ever revisited.
+
 Supersedes [ADR-0007](0007-ollama-backed-local-cleanup.md)'s Ollama-backed
 `Local` provider. Restores (with refinements) the approach from
 [ADR-0006](0006-shared-ggml-symbol-collision-and-model-catalog.md). Amends

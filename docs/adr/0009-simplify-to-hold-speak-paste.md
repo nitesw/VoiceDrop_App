@@ -68,6 +68,9 @@ and Quit.
   (quantized, about 550 MB), the language set explicitly instead of guessed per
   clip, beam search instead of greedy decoding, and a proper resampler instead of
   the Phase 1 linear one.
+  Found while measuring this: "Auto" language detection never actually ran
+  (whisper-rs defaults to English unless told otherwise), so non-English
+  speech was translated into English instead of transcribed. Fixed.
 - **Language-cycle hotkey**, remembered between launches.
 - **Launch at Login** via `SMAppService`.
 - **Stable self-signed code signature**, so the hotkey works on the first launch

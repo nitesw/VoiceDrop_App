@@ -1,5 +1,7 @@
 # Phase 6 — Robustness: Voice Commands, Errors & Onboarding
 
+> **Deferred by [ADR-0009](../adr/0009-simplify-to-hold-speak-paste.md)** (2026-11-08): not being built. VoiceDrop was simplified to hold ⌥Space, speak, paste. This doc stays as the detailed thinking if any item here comes back; see the ADR's "Deferred" table.
+
 Tracks [GitHub issue #7](https://github.com/nitesw/VoiceDrop_App/issues/7). Depends on [0006-phase5-settings-window.md](0006-phase5-settings-window.md). Terms in *italics* refer to [CONTEXT.md](../../CONTEXT.md).
 
 Scope: take the macOS app from "works on the happy path" to "safe to hand to a real user." This is the last macOS-specific phase before cross-platform work begins.
